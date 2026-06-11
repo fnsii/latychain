@@ -1,4 +1,4 @@
-"""Run all latychain tests — both core API and import-hook sugar syntax."""
+"""Run all latychain tests — core API, import-hook sugar, and doc examples."""
 
 import sys
 import os
@@ -22,6 +22,22 @@ print('=' * 55)
 
 import latychain.ChainDotRule
 import _test_sugar
+
+print()
+
+print('=' * 55)
+print('Part 3: Doc examples (explicit API)')
+print('=' * 55)
+
+import _test_doc_examples
+
+print()
+
+print('=' * 55)
+print('Part 4: Doc examples (sugar syntax via hook)')
+print('=' * 55)
+
+import _test_doc_sugar
 
 print()
 

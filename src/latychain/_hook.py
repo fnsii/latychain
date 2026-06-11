@@ -12,6 +12,7 @@ while skipping strings, comments, and attribute access (obj.attr).
 """
 
 import io
+import keyword
 import os
 import sys
 import tokenize
@@ -27,7 +28,8 @@ from typing import List, Tuple
 def read_dot_expr(source: str, pos: int) -> Tuple[str, int]:
     """Read a complete .xxx.yyy.zzz() expression from source at pos.
 
-    Handles arbitrarily nested parentheses in arguments.
+    Handles arbitrarily nested parentheses in arguments and skips
+    whitespace/newlines between segments (supports multi-line chains).
 
     Args:
         source: The full source code string.
@@ -55,23 +57,34 @@ def read_dot_expr(source: str, pos: int) -> Tuple[str, int]:
                 depth -= 1
             pos += 1
 
-    # Read subsequent .xxx or .xxx() segments
-    while pos < len(source) and source[pos] == '.':
-        if pos + 1 < len(source) and source[pos + 1].isalpha():
+    # Read subsequent .xxx or .xxx() segments (skip whitespace between segments)
+    # Use a lookahead approach: peek the next non-whitespace char
+    _ws = ' \t\n\r'
+    while pos < len(source):
+        # Remember current position in case no next segment
+        saved = pos
+        # Skip whitespace / newlines (will be included in expression if next segment found)
+        while pos < len(source) and source[pos] in _ws:
             pos += 1
-            while pos < len(source) and (source[pos].isalnum() or source[pos] == '_'):
-                pos += 1
-            if pos < len(source) and source[pos] == '(':
-                depth = 1
-                pos += 1
-                while pos < len(source) and depth > 0:
-                    if source[pos] == '(':
-                        depth += 1
-                    elif source[pos] == ')':
-                        depth -= 1
+        if pos < len(source) and source[pos] == '.':
+            nxt = pos + 1
+            if nxt < len(source) and source[nxt].isalpha():
+                pos = nxt
+                while pos < len(source) and (source[pos].isalnum() or source[pos] == '_'):
                     pos += 1
-        else:
-            break
+                if pos < len(source) and source[pos] == '(':
+                    depth = 1
+                    pos += 1
+                    while pos < len(source) and depth > 0:
+                        if source[pos] == '(':
+                            depth += 1
+                        elif source[pos] == ')':
+                            depth -= 1
+                        pos += 1
+                continue  # successfully read a segment, continue to look for more
+        # No next segment found — restore position to before whitespace skip
+        pos = saved
+        break
 
     return source[start:pos], pos
 
@@ -105,6 +118,8 @@ def _split_args(args: str) -> List[str]:
 def parse_dot_expr(expr: str) -> str:
     """Parse a .xxx.yyy.zzz() expression into Chain([...]) Python code.
 
+    Skips whitespace between segments (supports multi-line chains).
+
     Example:
         ".any(0).uuu.rex(r'x\\d')"
         -> "Chain([ChainRuleAtom.any(0), 'uuu', ChainRuleAtom.rex(r'x\\d')])"
@@ -113,6 +128,11 @@ def parse_dot_expr(expr: str) -> str:
     pos = 0
 
     while pos < len(expr):
+        # Skip whitespace between segments
+        while pos < len(expr) and expr[pos] in ' \t\n\r':
+            pos += 1
+        if pos >= len(expr):
+            break
         assert expr[pos] == '.', f"Expected '.' at offset {pos}"
         pos += 1
 
@@ -194,13 +214,36 @@ def transform_source(source: str) -> str:
                 and tokens[i + 1].type == tokenize.NAME
                 and tokens[i + 1].string[0].isalpha()):
 
-            # Skip obj.attr, ).attr, ].attr
+            # --- Determine whether to skip ---
+            # Case 1: obj.attr, print.attr, etc. — skip
+            # Case 2: assert .xxx, return .xxx — transform (keyword before dot)
+            # Case 3: ).xxx(...) — transform if xxx is a ChainRuleAtom call, else skip
+            # Case 4: 123.attr, ].attr, }.attr — skip
             if i > 0:
                 prev = tokens[i - 1]
-                if (prev.type == tokenize.NAME
-                        or prev.type == tokenize.NUMBER
-                        or (prev.type == tokenize.OP and prev.string in ')]}')):
-                    continue
+
+                if prev.type == tokenize.NUMBER:
+                    continue  # 123.attr → skip
+
+                if prev.type == tokenize.OP and prev.string in ']}':
+                    continue  # ].attr, }.attr → skip
+
+                if prev.type == tokenize.OP and prev.string == ')':
+                    # ).xxx — could be func().attr (skip) or ).rex(...) (transform)
+                    # Only transform known atom calls after )
+                    _ATOM_NAMES = frozenset({'any', 'rex', 'enum', 'apply', 'long', 'un', 'ext'})
+                    is_atom_call = (
+                        i + 2 < len(tokens)
+                        and tokens[i + 1].type == tokenize.NAME
+                        and tokens[i + 1].string in _ATOM_NAMES
+                        and tokens[i + 2].type == tokenize.OP
+                        and tokens[i + 2].string == '('
+                    )
+                    if not is_atom_call:
+                        continue  # func().attr or func().method() → skip
+
+                if prev.type == tokenize.NAME and prev.string not in keyword.kwlist:
+                    continue  # obj.attr → skip; assert .xxx → transform
 
             byte_offset = _token_offset(source, tok)
             try:

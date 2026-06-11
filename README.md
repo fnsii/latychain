@@ -1,5 +1,7 @@
 # latychain
 
+> **⚠️ 早期开发阶段** — API 可能发生变化。
+
 **Chain-structured data and pattern matching with `.xxx.yyy` syntax.**
 
 `latychain` provides two core types — [`Chain`](#chain) (immutable ordered container) and [`ChainRuleAtom`](#chainruleatom) (rule atoms) — plus an optional **import hook** that enables the concise `.xxx.yyy` syntax for constructing chains.
@@ -17,11 +19,12 @@ rule = .any(0).uuu.rex(r'x\d')           # → Chain([any(0), 'uuu', rex(...)])
 # ── Nested rules ──
 r2 = .any(0).enum(
     .hi.rex(r'x[0-9]'),
-    .wuhu.apply(f)
+    .wuhu.apply(lambda c: str(c).startswith('.x'))
 )
 
-# ── Matching ──
-.x.uuu.x1.match(rule)                    # True
+# ── Matching (call .match() as a method on the Chain object) ──
+data = .x.uuu.x1
+data.match(rule)                         # True
 ```
 
 ---
@@ -99,10 +102,15 @@ rule = .any(0).enum(
     .user.any(0)
 ).rex(r'\d+')
 
-# ── Match ──
-.user.login.123.match(rule)       # True
-.admin.delete.456.match(rule)     # True
-.guest.abc.match(rule)            # False
+# ── Match (call .match() on a Chain variable, not in the chain expression) ──
+user_data = Chain(['user', 'login', '123'])
+user_data.match(rule)                 # True
+
+admin_data = Chain(['admin', 'delete', '456'])
+admin_data.match(rule)                # True
+
+guest_data = Chain(['guest', 'abc'])
+guest_data.match(rule)                # False
 ```
 
 ---
@@ -229,8 +237,8 @@ Apply a user function to `long` consecutive elements. The function receives a `C
 .apply(lambda seg: str(seg).startswith('.x'))
 # single element starting with 'x'
 
-.apply(lambda seg: len(seg) > 2, long=2)
-# two consecutive elements, total chain length > 2
+.apply(lambda seg: seg[0] != seg[1], long=2)
+# two consecutive elements, check they differ
 ```
 
 ### long — string length
@@ -323,6 +331,20 @@ The import hook uses Python's `tokenize` module to safely identify `.xxx` expres
 | `"strings .here"` | ❌ No | inside string literals |
 | `# comments .here` | ❌ No | inside comments |
 
+### Limitations
+
+- **`.match()` is a Chain method, not a chain segment.** Always call `.match()` on a separate Chain variable, not inside a chain expression:
+  ```python
+  # ✅ Correct
+  data = .user.login.id123
+  data.match(rule)
+
+  # ❌ Wrong — .match(rule) becomes ChainRuleAtom.match(rule) which doesn't exist
+  # .user.login.id123.match(rule)
+  ```
+
+- **Numeric-only segments (`.123`, `.42`) are not supported.** Use alphanumeric segments (`.id123`, `.val42`) or explicit `Chain(['123'])` construction.
+
 ### Nested expressions
 
 Arguments inside `enum()`, `ext()`, etc. are recursively transformed:
@@ -349,9 +371,9 @@ import latychain.ChainDotRule
 
 heading_rule = .any(0).heading.rex(r'h[1-6]')
 
-.heading.h1.match(heading_rule)          # True
-.body.heading.h3.match(heading_rule)     # True
-.heading.h7.match(heading_rule)          # False
+Chain(['heading', 'h1']).match(heading_rule)          # True
+Chain(['body', 'heading', 'h3']).match(heading_rule)  # True
+Chain(['heading', 'h7']).match(heading_rule)           # False
 ```
 
 ### Path permissions
@@ -365,9 +387,9 @@ allow_rule = .any(0).enum(
     .admin.un('secret').any(0)
 )
 
-.a.user.profile.match(allow_rule)        # True
-.a.admin.dashboard.match(allow_rule)      # True
-.a.admin.secret.match(allow_rule)          # False
+Chain(['a', 'user', 'profile']).match(allow_rule)         # True
+Chain(['a', 'admin', 'dashboard']).match(allow_rule)       # True
+Chain(['a', 'admin', 'secret']).match(allow_rule)           # False
 ```
 
 ### Log classification
@@ -384,8 +406,8 @@ error_pattern = (
     .any(0)
 )
 
-.2024.01.15.ERROR.timeout.match(error_pattern)     # True
-.2024.01.15.INFO.request.match(error_pattern)       # False
+Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(error_pattern)   # True
+Chain(['2024', '01', '15', 'INFO', 'request']).match(error_pattern)     # False
 ```
 
 ---
@@ -499,7 +521,9 @@ latychain/
 ├── test/
 │   ├── run_all.py           # Test runner
 │   ├── test_core.py         # Core API tests (30 cases)
-│   └── _test_sugar.py       # Sugar syntax integration tests
+│   ├── _test_sugar.py       # Sugar syntax integration tests
+│   ├── _test_doc_examples.py # Doc example tests (explicit API)
+│   └── _test_doc_sugar.py   # Doc example tests (sugar syntax)
 ├── docs/
 │   ├── api-reference.md     # Complete API reference
 │   └── guide.md             # Usage guide and practical patterns

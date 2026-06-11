@@ -228,3 +228,10 @@ The transformer correctly ignores:
 - Float literals: `.5`, `.3e10`
 - Object attributes: `obj.attr`, `func().attr`
 - Index access: `list[0].attr`
+
+### Limitations
+
+- **`.match()` is a Chain method**, not a ChainRuleAtom segment. Call `.match()`
+  on a separate Chain variable, not inside a chain expression.
+- **Numeric segments (`.123`) are not supported.** Use `Chain(['123'])` instead.
+- **The hook transforms imported modules only**, not the entry script itself.

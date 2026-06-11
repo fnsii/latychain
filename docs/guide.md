@@ -1,5 +1,7 @@
 # Usage Guide
 
+> **⚠️ 早期开发阶段** — API 可能发生变化。
+
 ## Installation
 
 ```bash
@@ -31,7 +33,7 @@ rule = Chain([
 ])
 
 # Match
-data.match(rule)                        # depends on data
+data.match(rule)
 ```
 
 ### 2. `.xxx.yyy` syntax sugar (recommended for readability)
@@ -52,9 +54,9 @@ heading = .heading.h1
 # Rule chains
 rule = .any(0).user.any(0).rex(r'\d+')
 
-# Matching
-.user.profile.123.match(rule)    # True
-.guest.login.match(rule)         # False
+# Matching (call .match() on a Chain variable, not in the chain expression)
+Chain(['user', 'profile', '123']).match(rule)    # True
+Chain(['guest', 'login']).match(rule)             # False
 ```
 
 The hook automatically transforms `.xxx` at **compile time** (no runtime overhead).
@@ -110,9 +112,9 @@ import latychain.ChainDotRule
 
 rule = .config.database.connection.pool.any(0)
 
-.config.database.connection.pool.5.match(rule)      # True
-.config.database.connection.pool.match(rule)         # True
-.config.database.timeout.match(rule)                 # False
+Chain(['config', 'database', 'connection', 'pool', '5']).match(rule)  # True
+Chain(['config', 'database', 'connection', 'pool']).match(rule)       # True
+Chain(['config', 'database', 'timeout']).match(rule)                  # False
 ```
 
 ### Routing / permissions
@@ -126,10 +128,10 @@ route_rule = .api.v1.enum(
     .admin.un('secret').any(0)
 )
 
-.api.v1.users.123.match(route_rule)              # True
-.api.v1.admin.dashboard.match(route_rule)         # True
-.api.v1.admin.secret.match(route_rule)             # False
-.api.v2.users.123.match(route_rule)               # False
+Chain(['api', 'v1', 'users', '123']).match(route_rule)              # True
+Chain(['api', 'v1', 'admin', 'dashboard']).match(route_rule)        # True
+Chain(['api', 'v1', 'admin', 'secret']).match(route_rule)            # False
+Chain(['api', 'v2', 'users', '123']).match(route_rule)               # False
 ```
 
 ### Log level filtering
@@ -149,9 +151,9 @@ log_rule = (
     .any(0)
 )
 
-.2024.01.15.ERROR.timeout.match(log_rule)         # True
-.2024.01.15.INFO.request.match(log_rule)           # False (INFO not in enum)
-.2024.01.15.CRITICAL.oom.match(log_rule)           # True
+Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(log_rule)      # True
+Chain(['2024', '01', '15', 'INFO', 'request']).match(log_rule)        # False
+Chain(['2024', '01', '15', 'CRITICAL', 'oom']).match(log_rule)        # True
 ```
 
 ### Optional features (ext)
@@ -162,9 +164,9 @@ import latychain.ChainDotRule
 # .item.<id> optionally followed by .details
 rule = .item.rex(r'\d+').ext(.details)
 
-.item.42.match(rule)              # True (ext skipped)
-.item.42.details.match(rule)      # True (ext matched)
-.item.42.extra.match(rule)        # False (ext only accepts .details)
+Chain(['item', '42']).match(rule)              # True (ext skipped)
+Chain(['item', '42', 'details']).match(rule)   # True (ext matched)
+Chain(['item', '42', 'extra']).match(rule)     # False (ext only accepts .details)
 ```
 
 ### Custom validation (apply)
@@ -177,9 +179,9 @@ rule = .user.rex(r'[a-z]+').apply(
     lambda seg: int(str(seg).lstrip('.')) > 0
 )
 
-.user.alice.42.match(rule)        # True
-.user.alice.0.match(rule)         # False (not > 0)
-.user.alice.-1.match(rule)        # False
+Chain(['user', 'alice', '42']).match(rule)    # True
+Chain(['user', 'alice', '0']).match(rule)      # False (not > 0)
+Chain(['user', 'alice', '-1']).match(rule)     # False
 ```
 
 ---
@@ -242,3 +244,18 @@ rule = .any(0).admin
 ```
 
 You can mix both styles freely — the hook only transforms `.xxx` at the source level.
+
+---
+
+## Known Limitations
+
+- **`.match()` is a Chain method, not a chain segment.** Always call `.match()` on a separate Chain variable:
+  ```python
+  # ✅ Correct
+  data = .user.login.id123
+  data.match(rule)
+  ```
+
+- **Numeric-only segments (`.123`) are not supported.** Use `Chain(['123'])` for numeric data.
+
+- **The import hook only transforms modules imported after it.** The entry-point script itself is not transformed.
