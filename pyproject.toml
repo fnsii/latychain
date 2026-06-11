@@ -21,10 +21,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/latydev/latychain"
-Repository = "https://github.com/latydev/latychain"
-Documentation = "https://github.com/latydev/latychain#readme"
-"Bug Tracker" = "https://github.com/latydev/latychain/issues"
+Homepage = "https://github.com/fnsii/latychain"
+Repository = "https://github.com/fnsii/latychain"
+Documentation = "https://github.com/fnsii/latychain#readme"
+"Bug Tracker" = "https://github.com/fnsii/latychain/issues"
 
 [build-system]
 requires = ["hatchling"]
