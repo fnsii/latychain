@@ -453,14 +453,12 @@ import latychain.ChainDotRule   # registers the import hook globally
 
 ## Design & Implementation
 
-Detailed design and implementation notes are in the [`docs/`](./docs/) directory:
+Detailed documentation is in the [`docs/`](./docs/) directory:
 
 | Document | Description |
 |----------|-------------|
-| [`docs/describe.md`](./docs/describe.md) | High-level design overview |
-| [`docs/design.1.md`](./docs/design.1.md) | v1 design — Chain + ChainRuleAtom |
-| [`docs/design.3.md`](./docs/design.3.md) | Final design with `.xxx.yyy` syntax |
-| [`docs/impl.md`](./docs/impl.md) | Implementation architecture and details |
+| [`docs/api-reference.md`](./docs/api-reference.md) | Complete API reference for Chain, ChainRuleAtom, and the import hook |
+| [`docs/guide.md`](./docs/guide.md) | Usage guide with practical patterns, migration tips, and deep dives |
 
 ### Key design decisions
 
@@ -502,7 +500,9 @@ latychain/
 │   ├── run_all.py           # Test runner
 │   ├── test_core.py         # Core API tests (30 cases)
 │   └── _test_sugar.py       # Sugar syntax integration tests
-├── docs/                    # Design documents
+├── docs/
+│   ├── api-reference.md     # Complete API reference
+│   └── guide.md             # Usage guide and practical patterns
 ├── pyproject.toml           # Project metadata
 └── README.md                # This file
 ```
