@@ -1,29 +1,22 @@
 # latychain
 
-> **⚠️ 早期开发阶段** — API 可能发生变化。
+> **⚠️ Early Development** — API may change.
 
-**Chain-structured data and pattern matching with `.xxx.yyy` syntax.**
+**Chain-structured data and pattern matching.**
 
-`latychain` provides two core types — [`Chain`](#chain) (immutable ordered container) and [`ChainRuleAtom`](#chainruleatom) (rule atoms) — plus an optional **import hook** that enables the concise `.xxx.yyy` syntax for constructing chains.
+`latychain` provides two core types — [`Chain`](#chain) (immutable ordered container) and [`ChainRuleAtom`](#chainruleatom) (rule atoms). An optional **import hook** enables the concise `.xxx.yyy` syntax in separate module files.
 
 ```python
-import latychain.ChainDotRule   # enable .xxx.yyy sugar
-from latychain import Chain
+from latychain import Chain, ChainRuleAtom
 
 # ── Data chain ──
-heading = .heading.h1                    # → Chain(['heading', 'h1'])
+heading = Chain(['heading', 'h1'])
 
 # ── Rule chain ──
-rule = .any(0).uuu.rex(r'x\d')           # → Chain([any(0), 'uuu', rex(...)])
+rule = Chain([ChainRuleAtom.any(0), 'uuu', ChainRuleAtom.rex(r'x\d')])
 
-# ── Nested rules ──
-r2 = .any(0).enum(
-    .hi.rex(r'x[0-9]'),
-    .wuhu.apply(lambda c: str(c).startswith('.x'))
-)
-
-# ── Matching (call .match() as a method on the Chain object) ──
-data = .x.uuu.x1
+# ── Matching ──
+data = Chain(['x', 'uuu', 'x1'])
 data.match(rule)                         # True
 ```
 
@@ -31,48 +24,15 @@ data.match(rule)                         # True
 
 ## Table of Contents
 
-- [Why latychain?](#why-latychain)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Chain](#chain)
-  - [Construction](#construction)
-  - [Operations](#operations)
-  - [Methods](#methods)
 - [ChainRuleAtom](#chainruleatom)
-  - [any — arbitrary elements](#any--arbitrary-elements)
-  - [rex — regex match](#rex--regex-match)
-  - [enum — choice](#enum--choice)
-  - [apply — custom predicate](#apply--custom-predicate)
-  - [long — string length](#long--string-length)
-  - [un — negation](#un--negation)
-  - [ext — optional segment](#ext--optional-segment)
 - [Matching](#matching)
-  - [Full match vs partial match](#full-match-vs-partial-match)
-  - [Backtracking engine](#backtracking-engine)
 - [`.xxx.yyy` Syntax Sugar](#xxxyyy-syntax-sugar)
-  - [How it works](#how-it-works)
-  - [What is (and isn't) transformed](#what-is-and-isnt-transformed)
-  - [Nested expressions](#nested-expressions)
 - [Examples](#examples)
-  - [HTML headings](#html-headings)
-  - [Path permissions](#path-permissions)
-  - [Log classification](#log-classification)
 - [API Reference](#api-reference)
-- [Design & Implementation](#design--implementation)
 - [Development](#development)
-
----
-
-## Why latychain?
-
-Many domains deal with **hierarchical path-like data**: CSS selectors, filesystem paths, JSON paths, routing rules, config keys, log categories, etc. Representing these as plain strings is error-prone; representing them as lists is verbose.
-
-`latychain` gives you:
-
-- **Immutability** — chains are hashable, thread-safe, usable as dict keys
-- **Pattern matching** — declarative rules with backtracking, regex, custom predicates
-- **Concise syntax** — `.xxx.yyy` reads naturally as a path
-- **No external dependencies** — pure Python, uses only standard library
 
 ---
 
@@ -89,29 +49,32 @@ Requires Python 3.10+.
 ## Quick Start
 
 ```python
-import latychain.ChainDotRule
-from latychain import Chain
+from latychain import Chain, ChainRuleAtom
 
-# ── Construct data chains ──
-path = .user.profile.avatar
-# → Chain(['user', 'profile', 'avatar'])
+# ── Data chains ──
+path = Chain(['user', 'profile', 'avatar'])
+heading = Chain(['heading', 'h1'])
 
-# ── Construct rule chains ──
-rule = .any(0).enum(
-    .admin.any(0),
-    .user.any(0)
-).rex(r'\d+')
+# ── Rule chains ──
+rule = Chain([ChainRuleAtom.any(0), 'uuu', ChainRuleAtom.rex(r'x\d')])
 
-# ── Match (call .match() on a Chain variable, not in the chain expression) ──
-user_data = Chain(['user', 'login', '123'])
-user_data.match(rule)                 # True
+rule2 = Chain([
+    ChainRuleAtom.any(0),
+    ChainRuleAtom.enum(
+        Chain(['admin', ChainRuleAtom.any(0)]),
+        Chain(['user', ChainRuleAtom.any(0)]),
+    ),
+    ChainRuleAtom.rex(r'\d+'),
+])
 
-admin_data = Chain(['admin', 'delete', '456'])
-admin_data.match(rule)                # True
-
-guest_data = Chain(['guest', 'abc'])
-guest_data.match(rule)                # False
+# ── Matching ──
+Chain(['x', 'uuu', 'x1']).match(rule)               # True
+Chain(['user', 'login', '123']).match(rule2)         # True
+Chain(['admin', 'delete', '456']).match(rule2)       # True
+Chain(['guest', 'abc']).match(rule2)                 # False
 ```
+
+All code above works in a single `.py` file with no special setup.
 
 ---
 
@@ -127,16 +90,6 @@ from latychain import Chain
 Chain()                            # empty chain
 Chain(['a'])                       # single element
 Chain(['a', 'b', 'c'])             # multi-element
-Chain([ChainRuleAtom.any(0)])      # with rule atoms
-```
-
-Or with the `.xxx.yyy` sugar:
-
-```python
-import latychain.ChainDotRule
-
-.a.b.c                             # → Chain(['a', 'b', 'c'])
-.any(0).uuu.rex(r'x\d')           # → Chain([any(0), 'uuu', rex(...)])
 ```
 
 ### Operations
@@ -163,8 +116,8 @@ d = {Chain(['a']): 1}              # hashable, usable as dict key
 
 ```python
 chain.to_list()                    # → list of elements
-chain.startswith(prefix)           # prefix match (partial)
-chain.match(pattern)               # full match (see Matching section)
+chain.startswith(prefix)           # prefix match
+chain.match(pattern)               # full match
 chain.match(pattern, partial=True) # prefix match
 ```
 
@@ -172,17 +125,17 @@ chain.match(pattern, partial=True) # prefix match
 
 ## ChainRuleAtom
 
-`ChainRuleAtom` is the minimal unit of a rule pattern. All atoms are immutable and hashable.
+`ChainRuleAtom` is the minimal unit of a pattern rule. All atoms are immutable and hashable.
 
 | Factory | Purpose |
 |---------|---------|
-| [`any(min, max)`](#any--arbitrary-elements) | Match N arbitrary elements (with backtracking) |
-| [`rex(pattern)`](#rex--regex-match) | Regex fullmatch on a single element |
-| [`enum(*chains)`](#enum--choice) | Pick one of several alternatives |
-| [`apply(func, long)`](#apply--custom-predicate) | Custom predicate on N elements |
-| [`long(min, max)`](#long--string-length) | String length constraint |
-| [`un(value)`](#un--negation) | Negation: not equal to value |
-| [`ext(chain)`](#ext--optional-segment) | Optional segment (match or skip) |
+| `any(min, max)` | Match N arbitrary elements (with backtracking) |
+| `rex(pattern)` | Regex fullmatch on a single element |
+| `enum(*chains)` | Pick one of several alternatives |
+| `apply(func, long)` | Custom predicate on N elements |
+| `long(min, max)` | String length constraint |
+| `un(value)` | Negation: not equal to value |
+| `ext(chain)` | Optional segment (match or skip) |
 
 ```python
 from latychain import ChainRuleAtom
@@ -196,128 +149,136 @@ ChainRuleAtom.un('admin')
 ChainRuleAtom.ext(Chain(['a', 'b']))
 ```
 
-### any — arbitrary elements
+### `any(min=0, max=0)` — arbitrary elements
 
-Match between `min` and `max` arbitrary elements. Non-greedy with backtracking.
+| Example | Meaning |
+|---------|---------|
+| `any()` | At least 1 element |
+| `any(0)` | 0 or more |
+| `any(2)` | At least 2 |
+| `any(1, 3)` | 1 to 3 |
+| `any(0, 5)` | 0 to 5 |
+
+Non-greedy with backtracking: tries shorter matches first.
+
+### `rex(pattern)` — regex match
 
 ```python
-.any()        # at least 1
-.any(0)       # 0 or more
-.any(2)       # at least 2
-.any(1, 3)    # 1 to 3
-.any(0, 5)    # 0 to 5
+Chain([ChainRuleAtom.rex(r'h[12]')]).match(Chain(['h1']))    # True
+Chain([ChainRuleAtom.rex(r'\d+')]).match(Chain(['123']))     # True
 ```
-
-### rex — regex match
 
 Regex `fullmatch` on a **single** string element.
 
+### `enum(*chains)` — choice
+
 ```python
-.rex(r'h[12]')     # matches 'h1', 'h2'
-.rex(r'\d+')       # matches '123', '0'
+pat = Chain([ChainRuleAtom.enum(
+    Chain(['type', 'h1']),
+    Chain(['type', 'h2']),
+)])
+Chain(['type', 'h1']).match(pat)    # True
+Chain(['type', 'h3']).match(pat)    # False
 ```
 
-### enum — choice
-
-Match **one** of several alternatives. Each alternative is a `Chain` (data or rule).
+### `apply(func, long=1)` — custom predicate
 
 ```python
-.enum(
-    .type.h1,
-    .type.h2
-)
-# matches .type.h1  or  .type.h2
+# Check a single element
+Chain([ChainRuleAtom.apply(
+    lambda seg: str(seg).startswith('.x')
+)]).match(Chain(['xhello']))     # True
+
+# Check multiple elements (long=2)
+Chain([ChainRuleAtom.apply(
+    lambda seg: seg[0] != seg[1], long=2
+)]).match(Chain(['a', 'b']))      # True
 ```
 
-### apply — custom predicate
-
-Apply a user function to `long` consecutive elements. The function receives a `Chain` object.
+### `long(min, max=None)` — string length
 
 ```python
-.apply(lambda seg: str(seg).startswith('.x'))
-# single element starting with 'x'
-
-.apply(lambda seg: seg[0] != seg[1], long=2)
-# two consecutive elements, check they differ
+Chain([ChainRuleAtom.long(3)]).match(Chain(['abc']))      # True
+Chain([ChainRuleAtom.long(2, 5)]).match(Chain(['abc']))   # True
 ```
 
-### long — string length
-
-Constrain the **string length** of a single element.
+### `un(value)` — negation
 
 ```python
-.long(3)          # exactly 3 characters
-.long(2, 5)       # 2 to 5 characters
+Chain([ChainRuleAtom.un('admin')]).match(Chain(['user']))    # True
+Chain([ChainRuleAtom.un('admin')]).match(Chain(['admin']))   # False
 ```
 
-### un — negation
-
-Match any single element **except** the given value.
+### `ext(chain=None)` — optional segment
 
 ```python
-.un('admin')      # matches 'user', 'guest'; does NOT match 'admin'
-```
-
-### ext — optional segment
-
-Try to match the inner chain; if it fails, skip (consume 0 elements).
-
-```python
-.a.ext(.pi).b
-# matches .a.pi.b  (ext matched)
-# matches .a.b      (ext skipped)
-# does NOT match .a.x.b
+pat = Chain(['a', ChainRuleAtom.ext(Chain(['pi'])), 'b'])
+Chain(['a', 'b']).match(pat)        # True (ext skipped)
+Chain(['a', 'pi', 'b']).match(pat)  # True (ext matched)
+Chain(['a', 'x', 'b']).match(pat)   # False
 ```
 
 ---
 
 ## Matching
 
-### Full match vs partial match
-
-```python
-data = .a.b.c.d
-
-data.match(.a.b)              # False — does not consume c.d
-data.match(.a.b, partial=True) # True  — prefix matches
-```
-
 ### Backtracking engine
 
 The matcher uses **depth-first backtracking with non-greedy priority**. `any()` tries shorter matches first, then longer ones if the rest of the pattern fails.
 
 ```
-Rule: .any(0).uuu.rex(r'x\d')
-Data: .pre.uuu.x1
+Pattern: any(0) → "uuu" → rex(r'x\d')
+Data:    "pre"  → "uuu" → "x1"
 
 Attempts:
-  any=0 → uuu ≠ 'pre' → backtrack
-  any=1 → uuu = 'uuu' ✓ → rex(r'x\d') matches 'x1' ✓ → success
+  any=0 → "uuu" ≠ 'pre' → backtrack
+  any=1 → "pre"=any, "uuu"="uuu" ✓, rex(r'x\d') matches "x1" ✓ → success
+```
+
+### Full vs partial match
+
+```python
+data = Chain(['a', 'b', 'c', 'd'])
+
+data.match(Chain(['a', 'b']))                # False
+data.match(Chain(['a', 'b']), partial=True)  # True
 ```
 
 ---
 
 ## `.xxx.yyy` Syntax Sugar
 
-### Enabling
+The import hook transforms `.xxx.yyy.zzz()` expressions into `Chain([...])` calls.
 
 ```python
-import latychain.ChainDotRule
+.any(0).uuu.rex(r'x\d')
+# → Chain([ChainRuleAtom.any(0), 'uuu', ChainRuleAtom.rex(r'x\d')])
 ```
 
-This registers a **meta path finder** (import hook) that transforms all subsequently loaded `.py` files. Only needs to be done once, at the entry point.
+**Rule**: segments without `()` become strings; segments with `()` become `ChainRuleAtom.xxx()`.
 
-### How it works
+> **⚠️ Important**: The import hook only transforms **imported modules**, not the entry script itself. You need **two files**:
 
-The import hook uses Python's `tokenize` module to safely identify `.xxx` expressions and transform them into `Chain([...])` calls at compile time (not runtime).
+**main.py** (runner — no sugar syntax):
+```python
+import latychain.ChainDotRule
+import my_code      # this file gets transformed
+```
 
-| Source | Transformed to |
-|--------|---------------|
-| `.heading.h1` | `Chain(['heading', 'h1'])` |
-| `.any(0).uuu` | `Chain([ChainRuleAtom.any(0), 'uuu'])` |
-| `.any(0).uuu.rex(r'x\d')` | `Chain([ChainRuleAtom.any(0), 'uuu', ChainRuleAtom.rex(r'x\d')])` |
+**my_code.py** (uses `.xxx.yyy` sugar):
+```python
+from latychain import Chain
 
-**Rule**: segments without `()` become strings; segments with `()` become `ChainRuleAtom.xxx()` calls.
+# Data chain
+heading = .heading.h1               # → Chain(['heading', 'h1'])
+
+# Rule chain
+rule = .any(0).uuu.rex(r'x\d')
+
+# Matching (call .match() on a Chain variable)
+data = .x.uuu.x1
+data.match(rule)                     # True
+```
 
 ### What is (and isn't) transformed
 
@@ -327,37 +288,22 @@ The import hook uses Python's `tokenize` module to safely identify `.xxx` expres
 | `.any(0).uuu` | ✅ Yes | chain expression |
 | `obj.attr` | ❌ No | attribute access |
 | `.5 + .3` | ❌ No | float literals |
-| `func().attr` | ❌ No | method return value access |
-| `"strings .here"` | ❌ No | inside string literals |
+| `func().attr` | ❌ No | method return value |
+| `"strings .here"` | ❌ No | inside strings |
 | `# comments .here` | ❌ No | inside comments |
 
 ### Limitations
 
-- **`.match()` is a Chain method, not a chain segment.** Always call `.match()` on a separate Chain variable, not inside a chain expression:
-  ```python
-  # ✅ Correct
-  data = .user.login.id123
-  data.match(rule)
-
-  # ❌ Wrong — .match(rule) becomes ChainRuleAtom.match(rule) which doesn't exist
-  # .user.login.id123.match(rule)
-  ```
-
-- **Numeric-only segments (`.123`, `.42`) are not supported.** Use alphanumeric segments (`.id123`, `.val42`) or explicit `Chain(['123'])` construction.
-
-### Nested expressions
-
-Arguments inside `enum()`, `ext()`, etc. are recursively transformed:
+- **Numeric-only segments (`.123`, `.42`) are not supported.** Use `Chain(['123'])` instead.
+- **`.match()` is a Chain method**, not a RuleAtom. Call it on a separate Chain variable, not inside a chain expression:
 
 ```python
-.enum(
-    .hi.rex(r'x[0-9]'),
-    .wuhu.apply(f)
-)
-# → Chain([ChainRuleAtom.enum(
-#     Chain(['hi', ChainRuleAtom.rex(r'x[0-9]')]),
-#     Chain(['wuhu', ChainRuleAtom.apply(f)])
-# )])
+# ✅ Correct
+data = .user.login.id123
+data.match(rule)
+
+# ❌ Wrong — .match(...) becomes ChainRuleAtom.match(...) which doesn't exist
+# .user.login.id123.match(rule)
 ```
 
 ---
@@ -367,47 +313,45 @@ Arguments inside `enum()`, `ext()`, etc. are recursively transformed:
 ### HTML headings
 
 ```python
-import latychain.ChainDotRule
+from latychain import Chain, ChainRuleAtom
 
-heading_rule = .any(0).heading.rex(r'h[1-6]')
+rule = Chain([ChainRuleAtom.any(0), 'heading', ChainRuleAtom.rex(r'h[1-6]')])
 
-Chain(['heading', 'h1']).match(heading_rule)          # True
-Chain(['body', 'heading', 'h3']).match(heading_rule)  # True
-Chain(['heading', 'h7']).match(heading_rule)           # False
+Chain(['heading', 'h1']).match(rule)          # True
+Chain(['body', 'heading', 'h3']).match(rule)  # True
+Chain(['heading', 'h7']).match(rule)          # False
 ```
 
 ### Path permissions
 
 ```python
-import latychain.ChainDotRule
+from latychain import Chain, ChainRuleAtom
 
-# Allow /user/* and /admin/*, but reject /admin/secret
-allow_rule = .any(0).enum(
-    .user.any(0),
-    .admin.un('secret').any(0)
-)
+rule = Chain([ChainRuleAtom.any(0), ChainRuleAtom.enum(
+    Chain(['user', ChainRuleAtom.any(0)]),
+    Chain(['admin', ChainRuleAtom.un('secret'), ChainRuleAtom.any(0)]),
+)])
 
-Chain(['a', 'user', 'profile']).match(allow_rule)         # True
-Chain(['a', 'admin', 'dashboard']).match(allow_rule)       # True
-Chain(['a', 'admin', 'secret']).match(allow_rule)           # False
+Chain(['a', 'user', 'profile']).match(rule)         # True
+Chain(['a', 'admin', 'dashboard']).match(rule)       # True
+Chain(['a', 'admin', 'secret']).match(rule)           # False
 ```
 
 ### Log classification
 
 ```python
-import latychain.ChainDotRule
+from latychain import Chain, ChainRuleAtom
 
-# Match error logs: YYYY.MM.DD.ERROR.xxx
-error_pattern = (
-    .rex(r'\d{4}')
-    .rex(r'\d{2}')
-    .rex(r'\d{2}')
-    .ERROR
-    .any(0)
-)
+rule = Chain([
+    ChainRuleAtom.rex(r'\d{4}'),
+    ChainRuleAtom.rex(r'\d{2}'),
+    ChainRuleAtom.rex(r'\d{2}'),
+    'ERROR',
+    ChainRuleAtom.any(0),
+])
 
-Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(error_pattern)   # True
-Chain(['2024', '01', '15', 'INFO', 'request']).match(error_pattern)     # False
+Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(rule)   # True
+Chain(['2024', '01', '15', 'INFO', 'request']).match(rule)     # False
 ```
 
 ---
@@ -418,31 +362,21 @@ Chain(['2024', '01', '15', 'INFO', 'request']).match(error_pattern)     # False
 
 ```python
 class Chain:
-    def __init__(self, elements: Iterable = ()) -> None
-
-    # Read
-    def __getitem__(self, index: int) -> str | ChainRuleAtom
+    def __init__(self, elements=()) -> None
+    def __getitem__(self, index) -> str | ChainRuleAtom
     def __len__(self) -> int
     def __iter__(self) -> Iterator
     @property
     def elements(self) -> tuple
-
-    # String
     def __str__(self) -> str       # ".a.b.c"
     def __repr__(self) -> str      # "Chain(['a', 'b', 'c'])"
-
-    # Value semantics
     def __eq__(self, other) -> bool
     def __hash__(self) -> int
     def __bool__(self) -> bool
-
-    # Operations
     def __add__(self, other) -> Chain
-    def match(self, pattern: Chain, partial: bool = False) -> bool
-
-    # Utilities
+    def match(self, pattern, partial=False) -> bool
     def to_list(self) -> list
-    def startswith(self, prefix: Chain) -> bool
+    def startswith(self, prefix) -> bool
 ```
 
 ### `ChainRuleAtom`
@@ -450,61 +384,33 @@ class Chain:
 ```python
 class ChainRuleAtom:
     @staticmethod
-    def any(min: int = 0, max: int = 0) -> ChainRuleAtom
+    def any(min=0, max=0) -> ChainRuleAtom
     @staticmethod
-    def rex(pattern: str) -> ChainRuleAtom
+    def rex(pattern) -> ChainRuleAtom
     @staticmethod
-    def enum(*alternatives: Chain) -> ChainRuleAtom
+    def enum(*alternatives) -> ChainRuleAtom
     @staticmethod
-    def apply(func: callable, long: int = 1) -> ChainRuleAtom
+    def apply(func, long=1) -> ChainRuleAtom
     @staticmethod
-    def long(min: int, max: int | None = None) -> ChainRuleAtom
+    def long(min, max=None) -> ChainRuleAtom
     @staticmethod
-    def un(value: str) -> ChainRuleAtom
+    def un(value) -> ChainRuleAtom
     @staticmethod
-    def ext(chain: Chain | None = None) -> ChainRuleAtom
+    def ext(chain=None) -> ChainRuleAtom
 ```
 
 ### `latychain.ChainDotRule`
 
-```python
-import latychain.ChainDotRule   # registers the import hook globally
-```
-
----
-
-## Design & Implementation
-
-Detailed documentation is in the [`docs/`](./docs/) directory:
-
-| Document | Description |
-|----------|-------------|
-| [`docs/api-reference.md`](./docs/api-reference.md) | Complete API reference for Chain, ChainRuleAtom, and the import hook |
-| [`docs/guide.md`](./docs/guide.md) | Usage guide with practical patterns, migration tips, and deep dives |
-
-### Key design decisions
-
-1. **Single type for data and rules** — `Chain` holds both strings and `ChainRuleAtom` instances, no separate DSL
-2. **Compile-time transformation** — import hook uses `tokenize`, not runtime evaluation; safe and performant
-3. **Backtracking engine** — non-greedy depth-first search for `any()` matching
-4. **Immutability** — chains are hashable, thread-safe, usable as dict keys
+Import hook for `.xxx.yyy` syntax. See [syntax sugar section](#xxxyyy-syntax-sugar).
 
 ---
 
 ## Development
 
-### Setup
-
 ```bash
-git clone <repo>
+git clone https://github.com/fnsii/latychain
 cd latychain
-uv venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-```
-
-### Running tests
-
-```bash
+uv venv && source .venv/bin/activate   # or .venv\Scripts\activate
 uv run python test/run_all.py
 ```
 
@@ -513,20 +419,20 @@ uv run python test/run_all.py
 ```
 latychain/
 ├── src/latychain/
-│   ├── __init__.py          # Public API: Chain, ChainRuleAtom
+│   ├── __init__.py          # Chain, ChainRuleAtom exports
 │   ├── _chain.py            # Chain class + backtracking matcher
 │   ├── _atoms.py            # ChainRuleAtom + 7 rule atom types
 │   ├── _hook.py             # Import hook (tokenize transformer)
-│   └── ChainDotRule.py      # Entry point: import to enable sugar
+│   └── ChainDotRule.py      # Entry point for hook
 ├── test/
-│   ├── run_all.py           # Test runner
-│   ├── test_core.py         # Core API tests (30 cases)
-│   ├── _test_sugar.py       # Sugar syntax integration tests
-│   ├── _test_doc_examples.py # Doc example tests (explicit API)
-│   └── _test_doc_sugar.py   # Doc example tests (sugar syntax)
+│   ├── run_all.py           # Test runner (61 tests)
+│   ├── test_core.py         # Core API tests
+│   ├── _test_sugar.py       # Sugar syntax tests
+│   ├── _test_doc_examples.py # Doc example tests
+│   └── _test_doc_sugar.py   # Sugar doc example tests
 ├── docs/
-│   ├── api-reference.md     # Complete API reference
-│   └── guide.md             # Usage guide and practical patterns
-├── pyproject.toml           # Project metadata
-└── README.md                # This file
+│   ├── api-reference.md
+│   └── guide.md
+├── pyproject.toml
+└── README.md
 ```
