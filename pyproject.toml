@@ -20,6 +20,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[project.urls]
+Homepage = "https://github.com/latydev/latychain"
+Repository = "https://github.com/latydev/latychain"
+Documentation = "https://github.com/latydev/latychain#readme"
+"Bug Tracker" = "https://github.com/latydev/latychain/issues"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -32,6 +38,7 @@ include = [
     "/src",
     "/test",
     "/docs",
+    "/LICENSE",
     "/README.md",
     "/pyproject.toml",
 ]
