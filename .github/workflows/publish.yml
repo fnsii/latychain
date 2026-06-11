@@ -1,12 +1,15 @@
-# GitHub Actions workflow to publish latychain to PyPI.
+# GitHub Actions workflow to publish latychain to PyPI via OIDC (Trusted Publishing).
 #
-# Two trigger modes:
-#   1. Push a tag matching v*  (e.g. git tag v0.1.0 && git push --tags)
-#   2. Manual dispatch via GitHub UI
+# Trigger: push a tag matching v*  (e.g. git tag v0.1.0 && git push --tags)
 #
-# Requirements:
-#   - A PyPI API token stored as GitHub secret: PYPI_API_TOKEN
-#   - Get token from https://pypi.org/manage/account/token/
+# Prerequisites (one-time PyPI setup):
+#   1. Go to https://pypi.org/manage/project/latychain/settings/publishing/
+#   2. Add a new trusted publisher:
+#      - PyPI Project:  latychain
+#      - Provider:      GitHub
+#      - Owner:         fnsii
+#      - Repository:    latychain
+#      - Workflow:      publish.yml
 
 name: Publish to PyPI
 
@@ -22,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # for trusted publishing (optional, uses PYPI_API_TOKEN instead)
+      id-token: write  # required for OIDC trusted publishing
 
     steps:
       - uses: actions/checkout@v4
@@ -33,16 +36,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: pip install build twine
+        run: pip install build
 
       - name: Build package
         run: python -m build
 
-      - name: Verify package
-        run: twine check dist/*
-
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+      - name: Publish to PyPI via OIDC
+        uses: pypa/gh-action-pypi-publish@release/v1
