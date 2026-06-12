@@ -84,11 +84,12 @@ def test_chain_truediv_mixed():
     assert isinstance(c[1], ChainPatternAtom)
 
 
-def test_chain_startswith():
-    assert Chain(['a', 'b', 'c']).startswith(Chain(['a', 'b']))
-    assert Chain(['a', 'b', 'c']).startswith(Chain(['a']))
-    assert not Chain(['a', 'b', 'c']).startswith(Chain(['b']))
-    assert Chain([]).startswith(Chain([]))
+def test_chain_truediv_chain():
+    """Chain / Chain concatenates chains."""
+    c = Chain(['a', 'b']) / Chain(['c', 'd'])
+    assert c == Chain(['a', 'b', 'c', 'd'])
+    assert Chain() / Chain(['a']) == Chain(['a'])
+    assert Chain(['a']) / Chain() == Chain(['a'])
 
 
 def test_chain_to_list():
@@ -105,23 +106,23 @@ def test_chain_contains():
 
 
 def test_chain_init_rejects_non_string():
-    try:
-        Chain([123])
-        assert False, "should have raised TypeError"
-    except TypeError:
-        pass
+    # Numbers are auto-converted to strings
+    assert Chain([123]) == Chain(['123'])
+    assert Chain([3.14]) == Chain(['3.14'])
+    assert Chain([True]) == Chain(['True'])
+    # None and other types are rejected
     try:
         Chain([None])
         assert False, "should have raised TypeError"
     except TypeError:
         pass
     try:
-        Chain([1, 'a'])
+        Chain([[1, 2]])
         assert False, "should have raised TypeError"
     except TypeError:
         pass
-    # Strings and atoms are fine
-    Chain(['a', ChainPatternAtom.any()])  # no error
+    # Strings, numbers, and atoms are fine
+    Chain(['a', 123, ChainPatternAtom.any()])  # no error
 
 
 def test_chain_init_accepts_empty():
@@ -137,8 +138,17 @@ def test_any_str_default_and_zero():
     assert str(ChainPatternAtom.any(1, 3)) == 'any(1,3)'
 
 
+def test_any_max_zero_errors():
+    """any(max=0) should raise ValueError."""
+    try:
+        ChainPatternAtom.any(max=0)
+        assert False, "should have raised ValueError"
+    except ValueError:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════
-# Match — basic
+# Match — basic (pattern.match(data) direction)
 # ═══════════════════════════════════════════════════════════
 
 def test_match_exact_string():
@@ -149,42 +159,42 @@ def test_match_exact_string():
 def test_match_single_any():
     """any(0) matches zero or more arbitrary elements."""
     pat = Chain([ChainPatternAtom.any(0), 'end'])
-    assert Chain(['end']).match(pat), "any(0) match zero"
-    assert Chain(['x', 'end']).match(pat), "any(0) match one"
-    assert Chain(['x', 'y', 'end']).match(pat), "any(0) match two"
-    assert not Chain(['x', 'y']).match(pat), "no trailing end"
+    assert pat.match(Chain(['end'])), "any(0) match zero"
+    assert pat.match(Chain(['x', 'end'])), "any(0) match one"
+    assert pat.match(Chain(['x', 'y', 'end'])), "any(0) match two"
+    assert not pat.match(Chain(['x', 'y'])), "no trailing end"
 
 
 def test_match_any_min1():
     """any(1) requires at least one element."""
     pat = Chain([ChainPatternAtom.any(1), 'end'])
-    assert Chain(['x', 'end']).match(pat), "any(1) match one"
-    assert Chain(['x', 'y', 'end']).match(pat), "any(1) match two"
-    assert not Chain(['end']).match(pat), "any(1) fail: need at least one before end"
+    assert pat.match(Chain(['x', 'end'])), "any(1) match one"
+    assert pat.match(Chain(['x', 'y', 'end'])), "any(1) match two"
+    assert not pat.match(Chain(['end'])), "any(1) fail: need at least one before end"
 
 
 def test_match_any_bounded():
     """any(1, 2) matches between 1 and 2 elements."""
     pat = Chain([ChainPatternAtom.any(1, 2), 'end'])
-    assert Chain(['x', 'end']).match(pat), "any(1,2) match one"
-    assert Chain(['x', 'y', 'end']).match(pat), "any(1,2) match two"
-    assert not Chain(['x', 'y', 'z', 'end']).match(pat), "any(1,2) fail: too many"
+    assert pat.match(Chain(['x', 'end'])), "any(1,2) match one"
+    assert pat.match(Chain(['x', 'y', 'end'])), "any(1,2) match two"
+    assert not pat.match(Chain(['x', 'y', 'z', 'end'])), "any(1,2) fail: too many"
 
 
 def test_match_regex():
     """rex matches a single element via regex fullmatch."""
     pat = Chain([ChainPatternAtom.rex(r'h[12]')])
-    assert Chain(['h1']).match(pat)
-    assert Chain(['h2']).match(pat)
-    assert not Chain(['h3']).match(pat)
-    assert not Chain(['h12']).match(pat), "fullmatch required"
+    assert pat.match(Chain(['h1']))
+    assert pat.match(Chain(['h2']))
+    assert not pat.match(Chain(['h3']))
+    assert not pat.match(Chain(['h12'])), "fullmatch required"
 
 
 def test_match_regex_with_prefix():
     pat = Chain([ChainPatternAtom.any(0), ChainPatternAtom.rex(r'x\d')])
-    assert Chain(['a', 'x1']).match(pat)
-    assert Chain(['x1']).match(pat)
-    assert not Chain(['a', 'xabc']).match(pat)
+    assert pat.match(Chain(['a', 'x1']))
+    assert pat.match(Chain(['x1']))
+    assert not pat.match(Chain(['a', 'xabc']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -197,9 +207,9 @@ def test_enum_simple():
         Chain(['type', 'h1']),
         Chain(['type', 'h2']),
     )])
-    assert Chain(['type', 'h1']).match(pat)
-    assert Chain(['type', 'h2']).match(pat)
-    assert not Chain(['type', 'h3']).match(pat)
+    assert pat.match(Chain(['type', 'h1']))
+    assert pat.match(Chain(['type', 'h2']))
+    assert not pat.match(Chain(['type', 'h3']))
 
 
 def test_enum_with_any():
@@ -208,10 +218,10 @@ def test_enum_with_any():
         Chain(['user', ChainPatternAtom.any(0)]),
         Chain(['admin', ChainPatternAtom.any(0)]),
     )])
-    assert Chain(['user', 'login', 'abc']).match(pat)
-    assert Chain(['admin', 'delete']).match(pat)
-    assert Chain(['user']).match(pat), "any(0) after user matches zero"
-    assert not Chain(['guest']).match(pat)
+    assert pat.match(Chain(['user', 'login', 'abc']))
+    assert pat.match(Chain(['admin', 'delete']))
+    assert pat.match(Chain(['user'])), "any(0) after user matches zero"
+    assert not pat.match(Chain(['guest']))
 
 
 def test_enum_combined_with_any():
@@ -220,9 +230,18 @@ def test_enum_combined_with_any():
         Chain(['hi', ChainPatternAtom.rex(r'x[0-9]')]),
         Chain(['wuhu', ChainPatternAtom.apply(lambda c: str(c).startswith('.x'))]),
     )])
-    assert Chain(['pre', 'hi', 'x5']).match(pat), "any eats 'pre', enum matches hi+x5"
-    assert Chain(['hi', 'x5']).match(pat), "any eats nothing, enum matches hi+x5"
-    assert not Chain(['hi', 'abc']).match(pat), "regex fails"
+    assert pat.match(Chain(['pre', 'hi', 'x5'])), "any eats 'pre', enum matches hi+x5"
+    assert pat.match(Chain(['hi', 'x5'])), "any eats nothing, enum matches hi+x5"
+    assert not pat.match(Chain(['hi', 'abc'])), "regex fails"
+
+
+def test_enum_with_strings():
+    """enum accepts strings directly, auto-wraps into Chains."""
+    pat = Chain([ChainPatternAtom.enum('h1', 'h2', 'h3')])
+    assert pat.match(Chain(['h1']))
+    assert pat.match(Chain(['h2']))
+    assert pat.match(Chain(['h3']))
+    assert not pat.match(Chain(['h4']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -230,45 +249,45 @@ def test_enum_combined_with_any():
 # ═══════════════════════════════════════════════════════════
 
 def test_apply_single():
-    """apply with long=1 passes a single-element Chain to func."""
+    """apply with count=1 passes a single-element Chain to func."""
     pat = Chain([ChainPatternAtom.apply(lambda c: str(c) == '.abc')])
-    assert Chain(['abc']).match(pat)
-    assert not Chain(['xyz']).match(pat)
+    assert pat.match(Chain(['abc']))
+    assert not pat.match(Chain(['xyz']))
 
 
-def test_apply_long2():
-    """apply with long=2 passes two elements as a Chain."""
-    pat = Chain([ChainPatternAtom.apply(lambda c: len(c) == 2, long=2)])
-    assert Chain(['a', 'b']).match(pat), "two elements: len(chain)=2"
-    assert not Chain(['a']).match(pat), "single element too short"
+def test_apply_count2():
+    """apply with count=2 passes two elements as a Chain."""
+    pat = Chain([ChainPatternAtom.apply(lambda c: len(c) == 2, count=2)])
+    assert pat.match(Chain(['a', 'b'])), "two elements: len(chain)=2"
+    assert not pat.match(Chain(['a'])), "single element too short"
 
 
 def test_apply_check_length():
     """apply can check string length via str()."""
     pat = Chain([ChainPatternAtom.apply(lambda c: len(str(c)) > 5)])
     # Chain(['abcde']) -> str = '.abcde' -> len=6 > 5
-    assert Chain(['abcde']).match(pat)
-    assert not Chain(['a']).match(pat)
+    assert pat.match(Chain(['abcde']))
+    assert not pat.match(Chain(['a']))
 
 
 # ═══════════════════════════════════════════════════════════
-# Match — long
+# Match — len (string length constraint)
 # ═══════════════════════════════════════════════════════════
 
-def test_long_exact():
-    pat = Chain([ChainPatternAtom.long(3)])
-    assert Chain(['abc']).match(pat)
-    assert not Chain(['ab']).match(pat)
-    assert not Chain(['abcd']).match(pat)
+def test_len_exact():
+    pat = Chain([ChainPatternAtom.len(3)])
+    assert pat.match(Chain(['abc']))
+    assert not pat.match(Chain(['ab']))
+    assert not pat.match(Chain(['abcd']))
 
 
-def test_long_range():
-    pat = Chain([ChainPatternAtom.long(2, 4)])
-    assert Chain(['ab']).match(pat)
-    assert Chain(['abc']).match(pat)
-    assert Chain(['abcd']).match(pat)
-    assert not Chain(['a']).match(pat)
-    assert not Chain(['abcde']).match(pat)
+def test_len_range():
+    pat = Chain([ChainPatternAtom.len(2, 4)])
+    assert pat.match(Chain(['ab']))
+    assert pat.match(Chain(['abc']))
+    assert pat.match(Chain(['abcd']))
+    assert not pat.match(Chain(['a']))
+    assert not pat.match(Chain(['abcde']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -277,9 +296,9 @@ def test_long_range():
 
 def test_un_simple():
     pat = Chain([ChainPatternAtom.un('admin')])
-    assert Chain(['user']).match(pat)
-    assert Chain(['guest']).match(pat)
-    assert not Chain(['admin']).match(pat)
+    assert pat.match(Chain(['user']))
+    assert pat.match(Chain(['guest']))
+    assert not pat.match(Chain(['admin']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -289,16 +308,27 @@ def test_un_simple():
 def test_ext_optional():
     """ext marks a segment as optional."""
     pat = Chain(['a', ChainPatternAtom.ext(Chain(['pi'])), 'b'])
-    assert Chain(['a', 'b']).match(pat), "ext skipped"
-    assert Chain(['a', 'pi', 'b']).match(pat), "ext matched"
-    assert not Chain(['a', 'x', 'b']).match(pat), "ext partial match fail"
+    assert pat.match(Chain(['a', 'b'])), "ext skipped"
+    assert pat.match(Chain(['a', 'pi', 'b'])), "ext matched"
+    assert not pat.match(Chain(['a', 'x', 'b'])), "ext partial match fail"
 
 
-def test_ext_empty():
-    """ext() with no argument matches nothing (always skips)."""
-    pat = Chain(['a', ChainPatternAtom.ext(), 'b'])
-    assert Chain(['a', 'b']).match(pat)
-    assert not Chain(['a', 'x', 'b']).match(pat)
+def test_ext_with_enum():
+    """ext can contain enum."""
+    pat = Chain(['a', ChainPatternAtom.ext(ChainPatternAtom.enum('x', 'y')), 'b'])
+    assert pat.match(Chain(['a', 'b'])), "ext skipped"
+    assert pat.match(Chain(['a', 'x', 'b'])), "ext matched x"
+    assert pat.match(Chain(['a', 'y', 'b'])), "ext matched y"
+    assert not pat.match(Chain(['a', 'z', 'b'])), "ext no match"
+
+
+def test_ext_requires_arg():
+    """ext() with no argument should raise TypeError."""
+    try:
+        ChainPatternAtom.ext()
+        assert False, "should have raised TypeError"
+    except TypeError:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════
@@ -307,16 +337,16 @@ def test_ext_empty():
 
 def test_partial_match():
     data = Chain(['a', 'b', 'c', 'd'])
-    assert data.match(Chain(['a', 'b']), partial=True)
-    assert not data.match(Chain(['a', 'b']), partial=False), \
+    assert Chain(['a', 'b']).match(data, partial=True)
+    assert not Chain(['a', 'b']).match(data, partial=False), \
         "partial=False requires full consumption"
 
 
 def test_partial_with_any():
     data = Chain(['a', 'b', 'c'])
     pat = Chain([ChainPatternAtom.any(0), 'b'])
-    assert data.match(pat, partial=True), "any+b matches prefix a,b"
-    assert not data.match(pat, partial=False), "does not consume c"
+    assert pat.match(data, partial=True), "any+b matches prefix a,b"
+    assert not pat.match(data, partial=False), "does not consume c"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -324,17 +354,17 @@ def test_partial_with_any():
 # ═══════════════════════════════════════════════════════════
 
 def test_empty_data():
-    assert Chain().match(Chain([])), "empty matches empty"
-    assert Chain().match(Chain([ChainPatternAtom.any(0)]))
-    assert not Chain().match(Chain([ChainPatternAtom.any()])), "any() needs at least 1 element"
-    assert not Chain().match(Chain([ChainPatternAtom.any(1)])), "any(1) needs data"
+    assert Chain([]).match(Chain([])), "empty matches empty"
+    assert Chain([ChainPatternAtom.any(0)]).match(Chain([]))
+    assert not Chain([ChainPatternAtom.any()]).match(Chain([])), "any() needs at least 1 element"
+    assert not Chain([ChainPatternAtom.any(1)]).match(Chain([])), "any(1) needs data"
 
 
 def test_empty_pattern():
     """Empty pattern matches everything (partial) or nothing (full)."""
     data = Chain(['a', 'b'])
-    assert data.match(Chain([]), partial=True)
-    assert not data.match(Chain([]), partial=False), "empty pattern consumes zero"
+    assert Chain([]).match(data, partial=True)
+    assert not Chain([]).match(data, partial=False), "empty pattern consumes zero"
 
 
 # ═══════════════════════════════════════════════════════════

@@ -10,13 +10,13 @@ Typical usage::
     from latychain import Chain, ChainPatternAtom
 
     # Data chain
-    Chain(['heading', 'h1'])
+    data = Chain(['heading', 'h1'])
 
     # Rule chain
-    Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
+    rule = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
 
-    # Matching
-    Chain(['x', 'uuu', 'x1']).match(Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')]))
+    # Matching — pattern.match(data)
+    rule.match(Chain(['x', 'uuu', 'x1']))
     # → True
 """
 
@@ -120,7 +120,7 @@ class Chain(metaclass=_ChainMeta):
     (representing a pattern rule).
 
     Chains are **immutable**: once created, they cannot be modified. All
-    operations (``+``, etc.) return new :class:`Chain` instances. This makes
+    operations (``/``, etc.) return new :class:`Chain` instances. This makes
     them hashable and safe to use as dictionary keys or set members.
 
     Parameters
@@ -156,38 +156,101 @@ class Chain(metaclass=_ChainMeta):
 
     __slots__ = ('_data',)
 
+    # Types that are auto-converted to str via str()
+    _AUTO_STR_TYPES = (int, float, bool, bytes)
+
     def __init__(self, elements: Iterable = ()):
-        """Create a chain from *elements* (strings and/or ChainPatternAtom).
+        """Create a chain from *elements* (strings, numbers, and/or ChainPatternAtom).
+
+        Numbers (int, float, bool) are automatically converted to strings.
 
         Raises
         ------
         TypeError
-            If any element is not a :class:`str` or :class:`ChainPatternAtom`.
+            If any element cannot be converted to :class:`str` or is not a
+            :class:`ChainPatternAtom`.
         """
-        self._data: Tuple[Union[str, ChainPatternAtom], ...] = tuple(elements)
-        for elem in self._data:
-            if not isinstance(elem, (str, ChainPatternAtom)):
+        processed = []
+        for elem in elements:
+            if isinstance(elem, ChainPatternAtom):
+                processed.append(elem)
+            elif isinstance(elem, str):
+                processed.append(elem)
+            elif isinstance(elem, self._AUTO_STR_TYPES):
+                processed.append(str(elem))
+            else:
                 raise TypeError(
-                    f"Chain elements must be str or ChainPatternAtom, got {type(elem).__name__}"
+                    f"Chain elements must be str, number, or ChainPatternAtom, got {type(elem).__name__}"
                 )
+        self._data: Tuple[Union[str, ChainPatternAtom], ...] = tuple(processed)
 
-    # ── Read ──────────────────────────────────────────────
+    @classmethod
+    def from_str(cls, dotpath: str) -> Chain:
+        """Create a data chain from a dot-separated string.
 
-    def __getitem__(self, index: int) -> Union[str, ChainPatternAtom]:
-        """Return the element at *index* (supports negative indexing).
+        Each segment becomes a plain string element. Cannot represent
+        :class:`ChainPatternAtom` instances — use explicit construction
+        for rule chains.
 
         Parameters
         ----------
-        index : int
-            Index of the element to retrieve. Negative indices count from
-            the end of the chain.
+        dotpath : str
+            A dot-separated path like ``"a.b.c"`` or ``".a.b.c"``.
+            Leading dots are ignored.
 
         Returns
         -------
-        str or ChainPatternAtom
-            The element at the given position.
+        Chain
+            A new chain with each segment as an element.
+
+        Examples
+        --------
+        >>> Chain.from_str('a.b.c')
+        Chain(['a', 'b', 'c'])
+        >>> Chain.from_str('.a.b.c')
+        Chain(['a', 'b', 'c'])
+        >>> Chain.from_str('')
+        Chain([])
         """
-        return self._data[index]
+        if not dotpath:
+            return cls()
+        # Remove leading dot if present
+        if dotpath.startswith('.'):
+            dotpath = dotpath[1:]
+        if not dotpath:
+            return cls()
+        return cls(dotpath.split('.'))
+
+    # ── Read ──────────────────────────────────────────────
+
+    def __getitem__(self, index):
+        """Return element at *index*, or a sub-Chain for slices.
+
+        Parameters
+        ----------
+        index : int or slice
+            Index of the element to retrieve, or a slice.
+            Negative indices count from the end of the chain.
+
+        Returns
+        -------
+        str or ChainPatternAtom or Chain
+            The element at the given position (for int index),
+            or a new :class:`Chain` containing the sliced elements.
+
+        Examples
+        --------
+        >>> Chain(['a', 'b', 'c'])[0]
+        'a'
+        >>> Chain(['a', 'b', 'c'])[-1]
+        'c'
+        >>> Chain(['a', 'b', 'c'])[0:2]
+        Chain(['a', 'b'])
+        """
+        result = self._data[index]
+        if isinstance(index, slice):
+            return Chain(result)
+        return result
 
     def __len__(self) -> int:
         """Return the number of elements in the chain.
@@ -330,25 +393,28 @@ class Chain(metaclass=_ChainMeta):
             Chain() / "a" / "b" / "c"     → Chain(['a','b','c'])
             Chain / "a" / "b"              → Chain(['a','b'])
             chain / "x"                    → Chain([*chain, 'x'])
+            Chain(['a']) / Chain(['b'])     → Chain(['a','b'])
 
         Parameters
         ----------
-        other : str or ChainPatternAtom
-            Element to append.
+        other : str or ChainPatternAtom or Chain
+            Element to append, or another Chain to concatenate.
 
         Returns
         -------
         Chain
             A new chain with *other* appended.
         """
+        if isinstance(other, Chain):
+            return Chain((*self._data, *other._data))
         return Chain((*self._data, other))
 
     def __rtruediv__(self, other: Any) -> Chain:
         """Support ``"a" / Chain(['b'])`` — prepend *other*."""
         return Chain((other, *self._data))
 
-    def match(self, pattern: Chain, partial: bool = False) -> bool:
-        """Check whether this data chain matches the given pattern.
+    def match(self, data: Chain, partial: bool = False) -> bool:
+        """Check whether *data* matches this pattern chain.
 
         Uses exhaustive backtracking: tries all possible match lengths
         for each :class:`ChainPatternAtom` to find a combination that consumes
@@ -363,9 +429,8 @@ class Chain(metaclass=_ChainMeta):
 
         Parameters
         ----------
-        pattern : Chain
-            The pattern chain to match against. May contain both plain strings
-            and :class:`ChainPatternAtom` instances.
+        data : Chain
+            The data chain to match against.
         partial : bool, optional
             If ``True``, the pattern only needs to match a prefix of the data.
             If ``False`` (default), the pattern must consume **all** data
@@ -374,27 +439,35 @@ class Chain(metaclass=_ChainMeta):
         Returns
         -------
         bool
-            ``True`` if the data matches the pattern.
+            ``True`` if the data matches this pattern.
+
+        Raises
+        ------
+        TypeError
+            If *data* is not a :class:`Chain` instance.
 
         Examples
         --------
         >>> from latychain import ChainPatternAtom
-        >>> data = Chain(['x', 'uuu', 'x1'])
-        >>> pattern = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\\d')])
-        >>> data.match(pattern)
+        >>> rule = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\\d')])
+        >>> rule.match(Chain(['x', 'uuu', 'x1']))
         True
 
         Partial match:
 
-        >>> data.match(Chain(['x', 'uuu']), partial=True)
+        >>> Chain(['x', 'uuu']).match(Chain(['x', 'uuu', 'x1']), partial=True)
         True
-        >>> data.match(Chain(['x', 'uuu']), partial=False)
+        >>> Chain(['x', 'uuu']).match(Chain(['x', 'uuu', 'x1']), partial=False)
         False
         """
+        if not isinstance(data, Chain):
+            raise TypeError(
+                f"match() data must be a Chain instance, got {type(data).__name__}"
+            )
         if partial:
-            return _can_match(self._data, 0, pattern._data, 0)
-        lengths = _all_backtrack_lengths(self._data, 0, pattern._data, 0)
-        return len(self._data) in lengths
+            return _can_match(data._data, 0, self._data, 0)
+        lengths = _all_backtrack_lengths(data._data, 0, self._data, 0)
+        return len(data._data) in lengths
 
     # ── Utilities ─────────────────────────────────────────
 
@@ -412,29 +485,3 @@ class Chain(metaclass=_ChainMeta):
         ['a', 'b', 'c']
         """
         return list(self._data)
-
-    def startswith(self, prefix: Chain) -> bool:
-        """Check if this chain starts with the given prefix.
-
-        This is equivalent to ``self.match(prefix, partial=True)`` but
-        short-circuits on the first feasible match without enumerating all
-        alternatives.
-
-        Parameters
-        ----------
-        prefix : Chain
-            The prefix to check.
-
-        Returns
-        -------
-        bool
-            ``True`` if the chain starts with *prefix*.
-
-        Examples
-        --------
-        >>> Chain(['a', 'b', 'c']).startswith(Chain(['a', 'b']))
-        True
-        >>> Chain(['a', 'b', 'c']).startswith(Chain(['b']))
-        False
-        """
-        return _can_match(self._data, 0, prefix._data, 0)

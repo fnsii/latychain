@@ -5,7 +5,7 @@ Provides two core types:
 * :class:`Chain` — an immutable, ordered container whose elements can be
   plain strings (data) or :class:`ChainPatternAtom` instances (pattern rules).
 * :class:`ChainPatternAtom` — rule atoms for building pattern chains, with
-  factories for ``any``, ``rex``, ``enum``, ``apply``, ``long``, ``un``,
+  factories for ``any``, ``rex``, ``enum``, ``apply``, ``len``, ``un``,
   and ``ext``.
 
 Additionally, importing :mod:`latychain.ChainDotRule` registers a compile-time
@@ -29,8 +29,8 @@ Using explicit construction (no sugar)::
         ChainPatternAtom.any(0),
     ])
 
-    # Match
-    data.match(rule)   # True
+    # Match — pattern.match(data)
+    rule.match(data)   # True
 
 Using the ``.xxx.yyy`` syntax sugar::
 
@@ -39,27 +39,27 @@ Using the ``.xxx.yyy`` syntax sugar::
 
     data = .user.profile.avatar
     rule = .any(0).user.any(0)
-    data.match(rule)   # True
+    rule.match(data)   # True
 
 :class:`Chain` features:
 
 - Immutable and hashable — usable as dictionary keys and set members
-- ``+`` concatenation returns a new chain
-- ``match(rule)`` — backtracking pattern matching
-- ``startswith(prefix)`` — prefix checking
+- ``/`` construction via pathlib-style syntax (supports Chain concatenation)
+- ``match(data)`` — backtracking pattern matching
+- ``from_str(dotpath)`` — create chain from dot-separated string
 - ``to_list()`` — convert to plain list
 
 :class:`ChainPatternAtom` factories:
 
 .. code-block:: python
 
-    ChainPatternAtom.any(min=0, max=0)      # Match N arbitrary elements
+    ChainPatternAtom.any(min=1, max=-1)     # Match N arbitrary elements (max=-1 unbounded)
     ChainPatternAtom.rex(pattern)           # Regex fullmatch on one element
-    ChainPatternAtom.enum(*alternatives)    # Pick one of several chains
-    ChainPatternAtom.apply(func, long=1)    # Custom predicate on N elements
-    ChainPatternAtom.long(min, max=None)    # String length constraint
+    ChainPatternAtom.enum(*alternatives)    # Pick one of several chains or strings
+    ChainPatternAtom.apply(func, count=1)   # Custom predicate on N elements
+    ChainPatternAtom.len(min, max=None)     # String length constraint
     ChainPatternAtom.un(value)              # Not equal to value
-    ChainPatternAtom.ext(chain=None)        # Optional segment
+    ChainPatternAtom.ext(chain)             # Optional segment (match or skip)
 """
 
 from latychain._chain import Chain
@@ -78,4 +78,4 @@ try:
     from importlib.metadata import version, PackageNotFoundError
     __version__ = version("latychain")
 except (ImportError, PackageNotFoundError):
-    __version__ = "0.1.0a1"  # fallback when running from source (not installed)
+    __version__ = "0.2.1"  # fallback when running from source (not installed)

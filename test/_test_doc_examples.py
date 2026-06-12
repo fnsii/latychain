@@ -8,16 +8,15 @@ from latychain import Chain, ChainPatternAtom, Patom
 # ═══════════════════════════════════════════════════════════
 
 def test_readme_banner():
-    heading = Chain(['heading', 'h1'])
-    assert heading == Chain(['heading', 'h1'])
+    data = Chain(['heading', 'h1'])
+    assert data == Chain(['heading', 'h1'])
 
     rule = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
     r2 = Chain([ChainPatternAtom.any(0), ChainPatternAtom.enum(
         Chain(['hi', ChainPatternAtom.rex(r'x[0-9]')]),
         Chain(['wuhu', ChainPatternAtom.apply(lambda c: str(c).startswith('.x'))]),
     )])
-    data = Chain(['x', 'uuu', 'x1'])
-    assert data.match(rule)
+    assert rule.match(Chain(['x', 'uuu', 'x1']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -33,9 +32,9 @@ def test_readme_quickstart():
         Chain(['user', ChainPatternAtom.any(0)]),
     ), ChainPatternAtom.rex(r'\d+')])
 
-    assert Chain(['user', 'login', '123']).match(rule)
-    assert Chain(['admin', 'delete', '456']).match(rule)
-    assert not Chain(['guest', 'abc']).match(rule)
+    assert rule.match(Chain(['user', 'login', '123']))
+    assert rule.match(Chain(['admin', 'delete', '456']))
+    assert not rule.match(Chain(['guest', 'abc']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -67,9 +66,9 @@ def test_readme_chain_operations():
 def test_readme_chain_methods():
     chain = Chain(['a', 'b', 'c'])
     assert chain.to_list() == ['a', 'b', 'c']
-    assert chain.startswith(Chain(['a', 'b']))
-    assert chain.match(Chain(['a', 'b', 'c']))
-    assert chain.match(Chain(['a', 'b']), partial=True)
+    assert Chain(['a', 'b']).match(chain, partial=True)
+    assert Chain(['a', 'b', 'c']).match(chain)
+    assert Chain(['a', 'b']).match(chain, partial=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -81,33 +80,33 @@ def test_readme_chainruleatom_factories():
     ChainPatternAtom.rex(r'x\d')
     ChainPatternAtom.enum(Chain(['a']), Chain(['b']))
     ChainPatternAtom.apply(lambda c: len(c) > 2)
-    ChainPatternAtom.long(3, 5)
+    ChainPatternAtom.len(3, 5)
     ChainPatternAtom.un('admin')
     ChainPatternAtom.ext(Chain(['a', 'b']))
     # All fine as long as they don't throw
 
 
 # ═══════════════════════════════════════════════════════════
-# README.md — any / rex / enum / apply / long / un / ext
+# README.md — any / rex / enum / apply / len / un / ext
 # ═══════════════════════════════════════════════════════════
 
 def test_readme_any():
-    assert Chain(['x', 'y']).match(Chain([ChainPatternAtom.any(), 'y']))
-    assert Chain(['x', 'y']).match(Chain([ChainPatternAtom.any(0), 'y']))
-    assert Chain(['x', 'y', 'z']).match(Chain([ChainPatternAtom.any(2), 'z']))
-    assert Chain(['x', 'y', 'z']).match(Chain([ChainPatternAtom.any(1, 3), 'z']))
-    assert Chain(['x', 'y']).match(Chain([ChainPatternAtom.any(0, 5)]))
+    assert Chain([ChainPatternAtom.any(), 'y']).match(Chain(['x', 'y']))
+    assert Chain([ChainPatternAtom.any(0), 'y']).match(Chain(['x', 'y']))
+    assert Chain([ChainPatternAtom.any(2), 'z']).match(Chain(['x', 'y', 'z']))
+    assert Chain([ChainPatternAtom.any(1, 3), 'z']).match(Chain(['x', 'y', 'z']))
+    assert Chain([ChainPatternAtom.any(0, 5)]).match(Chain(['x', 'y']))
 
 
 def test_readme_rex():
     pat = Chain([ChainPatternAtom.rex(r'h[12]')])
-    assert Chain(['h1']).match(pat)
-    assert Chain(['h2']).match(pat)
-    assert not Chain(['h3']).match(pat)
+    assert pat.match(Chain(['h1']))
+    assert pat.match(Chain(['h2']))
+    assert not pat.match(Chain(['h3']))
 
     pat2 = Chain([ChainPatternAtom.rex(r'\d+')])
-    assert Chain(['123']).match(pat2)
-    assert Chain(['0']).match(pat2)
+    assert pat2.match(Chain(['123']))
+    assert pat2.match(Chain(['0']))
 
 
 def test_readme_enum():
@@ -115,41 +114,41 @@ def test_readme_enum():
         Chain(['type', 'h1']),
         Chain(['type', 'h2']),
     )])
-    assert Chain(['type', 'h1']).match(pat)
-    assert Chain(['type', 'h2']).match(pat)
-    assert not Chain(['type', 'h3']).match(pat)
+    assert pat.match(Chain(['type', 'h1']))
+    assert pat.match(Chain(['type', 'h2']))
+    assert not pat.match(Chain(['type', 'h3']))
 
 
 def test_readme_apply():
     pat1 = Chain([ChainPatternAtom.apply(lambda seg: str(seg).startswith('.x'))])
-    assert Chain(['xhello']).match(pat1)
+    assert pat1.match(Chain(['xhello']))
 
-    # long=2 passes 2 consecutive elements as a Chain; check they create a 2-element chain
-    pat2 = Chain([ChainPatternAtom.apply(lambda seg: seg[0] != seg[1], long=2)])
-    assert Chain(['a', 'b']).match(pat2)       # ('a','b') → a!=b ✓
-    assert not Chain(['a']).match(pat2)        # only 1 element, too short for long=2
+    # count=2 passes 2 consecutive elements as a Chain; check they create a 2-element chain
+    pat2 = Chain([ChainPatternAtom.apply(lambda seg: seg[0] != seg[1], count=2)])
+    assert pat2.match(Chain(['a', 'b']))       # ('a','b') → a!=b ✓
+    assert not pat2.match(Chain(['a']))        # only 1 element, too short for count=2
 
 
-def test_readme_long():
-    pat1 = Chain([ChainPatternAtom.long(3)])
-    assert Chain(['abc']).match(pat1)
-    assert not Chain(['ab']).match(pat1)
+def test_readme_len():
+    pat1 = Chain([ChainPatternAtom.len(3)])
+    assert pat1.match(Chain(['abc']))
+    assert not pat1.match(Chain(['ab']))
 
-    pat2 = Chain([ChainPatternAtom.long(2, 5)])
-    assert Chain(['abc']).match(pat2)
+    pat2 = Chain([ChainPatternAtom.len(2, 5)])
+    assert pat2.match(Chain(['abc']))
 
 
 def test_readme_un():
     pat = Chain([ChainPatternAtom.un('admin')])
-    assert Chain(['user']).match(pat)
-    assert not Chain(['admin']).match(pat)
+    assert pat.match(Chain(['user']))
+    assert not pat.match(Chain(['admin']))
 
 
 def test_readme_ext():
     pat = Chain(['a', ChainPatternAtom.ext(Chain(['pi'])), 'b'])
-    assert Chain(['a', 'b']).match(pat)
-    assert Chain(['a', 'pi', 'b']).match(pat)
-    assert not Chain(['a', 'x', 'b']).match(pat)
+    assert pat.match(Chain(['a', 'b']))
+    assert pat.match(Chain(['a', 'pi', 'b']))
+    assert not pat.match(Chain(['a', 'x', 'b']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -158,8 +157,8 @@ def test_readme_ext():
 
 def test_readme_matching_full_partial():
     data = Chain(['a', 'b', 'c', 'd'])
-    assert not data.match(Chain(['a', 'b']))
-    assert data.match(Chain(['a', 'b']), partial=True)
+    assert not Chain(['a', 'b']).match(data)
+    assert Chain(['a', 'b']).match(data, partial=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -168,9 +167,9 @@ def test_readme_matching_full_partial():
 
 def test_readme_example_headings():
     rule = Chain([ChainPatternAtom.any(0), 'heading', ChainPatternAtom.rex(r'h[1-6]')])
-    assert Chain(['heading', 'h1']).match(rule)
-    assert Chain(['body', 'heading', 'h3']).match(rule)
-    assert not Chain(['heading', 'h7']).match(rule)
+    assert rule.match(Chain(['heading', 'h1']))
+    assert rule.match(Chain(['body', 'heading', 'h3']))
+    assert not rule.match(Chain(['heading', 'h7']))
 
 
 def test_readme_example_permissions():
@@ -178,9 +177,9 @@ def test_readme_example_permissions():
         Chain(['user', ChainPatternAtom.any(0)]),
         Chain(['admin', ChainPatternAtom.un('secret'), ChainPatternAtom.any(0)]),
     )])
-    assert Chain(['a', 'user', 'profile']).match(rule)
-    assert Chain(['a', 'admin', 'dashboard']).match(rule)
-    assert not Chain(['a', 'admin', 'secret']).match(rule)
+    assert rule.match(Chain(['a', 'user', 'profile']))
+    assert rule.match(Chain(['a', 'admin', 'dashboard']))
+    assert not rule.match(Chain(['a', 'admin', 'secret']))
 
 
 def test_readme_example_logs():
@@ -191,8 +190,8 @@ def test_readme_example_logs():
         'ERROR',
         ChainPatternAtom.any(0),
     ])
-    assert Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(rule)
-    assert not Chain(['2024', '01', '15', 'INFO', 'request']).match(rule)
+    assert rule.match(Chain(['2024', '01', '15', 'ERROR', 'timeout']))
+    assert not rule.match(Chain(['2024', '01', '15', 'INFO', 'request']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -204,8 +203,8 @@ def test_api_enum_explicit():
         Chain(['type', 'h1']),
         Chain(['type', 'h2']),
     )])
-    assert Chain(['type', 'h1']).match(pat)
-    assert Chain(['type', 'h2']).match(pat)
+    assert pat.match(Chain(['type', 'h1']))
+    assert pat.match(Chain(['type', 'h2']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -214,9 +213,9 @@ def test_api_enum_explicit():
 
 def test_api_rex():
     pat = Chain([ChainPatternAtom.rex(r'x[0-9]')])
-    assert Chain(['x0']).match(pat)
-    assert Chain(['x9']).match(pat)
-    assert not Chain(['x10']).match(pat)
+    assert pat.match(Chain(['x0']))
+    assert pat.match(Chain(['x9']))
+    assert not pat.match(Chain(['x10']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -224,14 +223,14 @@ def test_api_rex():
 # ═══════════════════════════════════════════════════════════
 
 def test_guide_explicit():
-    data = Chain(['user', 'profile', 'avatar'])
+    data = Chain(['user', 'profile', '123'])
     rule = Chain([
         ChainPatternAtom.any(0),
         'user',
         ChainPatternAtom.any(0),
         ChainPatternAtom.rex(r'\d+'),
     ])
-    assert data.match(rule) == data.match(rule)  # just ensure it runs
+    assert rule.match(data) is True
 
 
 # ═══════════════════════════════════════════════════════════
@@ -243,34 +242,34 @@ def test_guide_matching_table():
     assert Chain(['a']).match(Chain(['a']))
     assert not Chain(['a']).match(Chain(['b']))
     # rex
-    assert Chain(['5']).match(Chain([ChainPatternAtom.rex(r'\d')]))
+    assert Chain([ChainPatternAtom.rex(r'\d')]).match(Chain(['5']))
     # any
-    assert Chain(['x', 'y']).match(Chain([ChainPatternAtom.any(0), 'y']))
+    assert Chain([ChainPatternAtom.any(0), 'y']).match(Chain(['x', 'y']))
     # un
-    assert Chain(['b']).match(Chain([ChainPatternAtom.un('a')]))
-    assert not Chain(['a']).match(Chain([ChainPatternAtom.un('a')]))
-    # long
-    assert Chain(['abc']).match(Chain([ChainPatternAtom.long(2, 4)]))
-    assert not Chain(['a']).match(Chain([ChainPatternAtom.long(2, 4)]))
+    assert Chain([ChainPatternAtom.un('a')]).match(Chain(['b']))
+    assert not Chain([ChainPatternAtom.un('a')]).match(Chain(['a']))
+    # len
+    assert Chain([ChainPatternAtom.len(2, 4)]).match(Chain(['abc']))
+    assert not Chain([ChainPatternAtom.len(2, 4)]).match(Chain(['a']))
     # ext: ext(Chain(['a'])) matches 'a' (consumes 1) or skips (consumes 0)
     # With pattern = [ext(Chain(['a'])), 'b']:
     pat_ext = Chain([ChainPatternAtom.ext(Chain(['a'])), 'b'])
-    assert Chain(['a', 'b']).match(pat_ext)   # ext consumes 'a', then 'b' matches
-    assert Chain(['b']).match(pat_ext)         # ext skips, then 'b' matches
-    assert not Chain(['x', 'b']).match(pat_ext) # ext skips or tries 'a'→fails, 'x' left unconsumed
+    assert pat_ext.match(Chain(['a', 'b']))   # ext consumes 'a', then 'b' matches
+    assert pat_ext.match(Chain(['b']))         # ext skips, then 'b' matches
+    assert not pat_ext.match(Chain(['x', 'b'])) # ext skips or tries 'a'→fails, 'x' left unconsumed
 
 
 def test_guide_backtracking():
     rule = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
     data = Chain(['pre', 'uuu', 'x1'])
-    assert data.match(rule)
+    assert rule.match(data)
 
 
 def test_guide_full_partial():
     data = Chain(['a', 'b', 'c', 'd'])
-    assert not data.match(Chain(['a', 'b']))
-    assert data.match(Chain(['a', 'b']), partial=True)
-    assert data.match(Chain([ChainPatternAtom.any(0), 'd']))
+    assert not Chain(['a', 'b']).match(data)
+    assert Chain(['a', 'b']).match(data, partial=True)
+    assert Chain([ChainPatternAtom.any(0), 'd']).match(data)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -279,9 +278,9 @@ def test_guide_full_partial():
 
 def test_guide_config():
     rule = Chain(['config', 'database', 'connection', 'pool', ChainPatternAtom.any(0)])
-    assert Chain(['config', 'database', 'connection', 'pool', '5']).match(rule)
-    assert Chain(['config', 'database', 'connection', 'pool']).match(rule)
-    assert not Chain(['config', 'database', 'timeout']).match(rule)
+    assert rule.match(Chain(['config', 'database', 'connection', 'pool', '5']))
+    assert rule.match(Chain(['config', 'database', 'connection', 'pool']))
+    assert not rule.match(Chain(['config', 'database', 'timeout']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -293,10 +292,10 @@ def test_guide_routing():
         Chain(['users', ChainPatternAtom.any(0)]),
         Chain(['admin', ChainPatternAtom.un('secret'), ChainPatternAtom.any(0)]),
     )])
-    assert Chain(['api', 'v1', 'users', '123']).match(rule)
-    assert Chain(['api', 'v1', 'admin', 'dashboard']).match(rule)
-    assert not Chain(['api', 'v1', 'admin', 'secret']).match(rule)
-    assert not Chain(['api', 'v2', 'users', '123']).match(rule)
+    assert rule.match(Chain(['api', 'v1', 'users', '123']))
+    assert rule.match(Chain(['api', 'v1', 'admin', 'dashboard']))
+    assert not rule.match(Chain(['api', 'v1', 'admin', 'secret']))
+    assert not rule.match(Chain(['api', 'v2', 'users', '123']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -311,9 +310,9 @@ def test_guide_log_level():
         ChainPatternAtom.enum(Chain(['ERROR']), Chain(['CRITICAL'])),
         ChainPatternAtom.any(0),
     ])
-    assert Chain(['2024', '01', '15', 'ERROR', 'timeout']).match(rule)
-    assert not Chain(['2024', '01', '15', 'INFO', 'request']).match(rule)
-    assert Chain(['2024', '01', '15', 'CRITICAL', 'oom']).match(rule)
+    assert rule.match(Chain(['2024', '01', '15', 'ERROR', 'timeout']))
+    assert not rule.match(Chain(['2024', '01', '15', 'INFO', 'request']))
+    assert rule.match(Chain(['2024', '01', '15', 'CRITICAL', 'oom']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -322,9 +321,9 @@ def test_guide_log_level():
 
 def test_guide_ext():
     rule = Chain(['item', ChainPatternAtom.rex(r'\d+'), ChainPatternAtom.ext(Chain(['details']))])
-    assert Chain(['item', '42']).match(rule)
-    assert Chain(['item', '42', 'details']).match(rule)
-    assert not Chain(['item', '42', 'extra']).match(rule)
+    assert rule.match(Chain(['item', '42']))
+    assert rule.match(Chain(['item', '42', 'details']))
+    assert not rule.match(Chain(['item', '42', 'extra']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -335,9 +334,9 @@ def test_guide_apply_validation():
     rule = Chain(['user', ChainPatternAtom.rex(r'[a-z]+'), ChainPatternAtom.apply(
         lambda seg: int(str(seg).lstrip('.')) > 0
     )])
-    assert Chain(['user', 'alice', '42']).match(rule)
-    assert not Chain(['user', 'alice', '0']).match(rule)
-    assert not Chain(['user', 'alice', '-1']).match(rule)
+    assert rule.match(Chain(['user', 'alice', '42']))
+    assert not rule.match(Chain(['user', 'alice', '0']))
+    assert not rule.match(Chain(['user', 'alice', '-1']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -361,14 +360,14 @@ def test_guide_dict_keys():
 
 def test_guide_any_vs_ext():
     # any allows anything in between
-    assert Chain(['a', 'b']).match(Chain([ChainPatternAtom.any(0), 'b']))
-    assert Chain(['x', 'y', 'b']).match(Chain([ChainPatternAtom.any(0), 'b']))
-    assert Chain(['b']).match(Chain([ChainPatternAtom.any(0), 'b']))
+    assert Chain([ChainPatternAtom.any(0), 'b']).match(Chain(['a', 'b']))
+    assert Chain([ChainPatternAtom.any(0), 'b']).match(Chain(['x', 'y', 'b']))
+    assert Chain([ChainPatternAtom.any(0), 'b']).match(Chain(['b']))
 
     # ext only matches the specific chain or nothing
-    assert Chain(['a', 'b']).match(Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']))
-    assert Chain(['a', 'a', 'b']).match(Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']))
-    assert not Chain(['a', 'x', 'b']).match(Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']))
+    assert Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']).match(Chain(['a', 'b']))
+    assert Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']).match(Chain(['a', 'a', 'b']))
+    assert not Chain(['a', ChainPatternAtom.ext(Chain(['a'])), 'b']).match(Chain(['a', 'x', 'b']))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -378,7 +377,7 @@ def test_guide_any_vs_ext():
 def test_guide_migration():
     data = Chain(['user', 'profile'])
     rule = Chain([ChainPatternAtom.any(0), 'admin'])
-    assert data.match(data)  # just verify no errors
+    assert rule.match(data) == rule.match(data)  # just verify no errors
 
 
 # ═══════════════════════════════════════════════════════════

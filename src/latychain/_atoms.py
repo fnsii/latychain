@@ -8,13 +8,13 @@ Available atoms (created via :class:`ChainPatternAtom` static methods):
 
 .. code-block:: python
 
-    ChainPatternAtom.any(min=1, max=0)      # Match N arbitrary elements
+    ChainPatternAtom.any(min=1, max=-1)     # Match N arbitrary elements (max=-1 unbounded)
     ChainPatternAtom.rex(pattern)           # Regex fullmatch on a single element
     ChainPatternAtom.enum(*alternatives)    # Pick one of several alternatives
-    ChainPatternAtom.apply(func, long=1)    # Custom predicate on N elements
-    ChainPatternAtom.long(min, max=None)    # String length constraint
+    ChainPatternAtom.apply(func, count=1)   # Custom predicate on N elements
+    ChainPatternAtom.len(min, max=None)     # String length constraint
     ChainPatternAtom.un(value)              # Negation: not equal to value
-    ChainPatternAtom.ext(chain=None)        # Optional segment (match or skip)
+    ChainPatternAtom.ext(chain)             # Optional segment (match or skip)
 """
 
 from __future__ import annotations
@@ -80,14 +80,14 @@ class _Any(ChainPatternAtom):
     """Match between *min* and *max* arbitrary data elements.
 
     Returns all possible consumed lengths in range [*min*, *upper_bound*],
-    sorted ascending (non-greedy priority). When *max* is 0, the upper
+    sorted ascending (non-greedy priority). When *max* is -1, the upper
     bound is unlimited (up to remaining data length).
     """
 
     __slots__ = ('min', 'max')
 
-    def __init__(self, min: int = 0, max: int = 0):
-        """*max* = 0 means unbounded (match any remaining elements)."""
+    def __init__(self, min: int = 1, max: int = -1):
+        """*max* = -1 means unbounded (match any remaining elements)."""
         self.min = min
         self.max = max
 
@@ -95,11 +95,11 @@ class _Any(ChainPatternAtom):
         remaining = len(data) - pos
         if remaining < self.min:
             return []
-        upper = min(remaining, self.max) if self.max > 0 else remaining
+        upper = min(remaining, self.max) if self.max >= 0 else remaining
         return list(range(self.min, upper + 1))
 
     def __str__(self) -> str:
-        if self.max == 0:
+        if self.max < 0:
             if self.min == 0:
                 return "any(0)"
             if self.min == 1:
@@ -201,51 +201,51 @@ class _Apply(ChainPatternAtom):
     """Match N elements via a user-supplied predicate.
 
     The predicate receives a :class:`~latychain._chain.Chain` object of
-    *long* consecutive elements and returns a boolean.
+    *count* consecutive elements and returns a boolean.
     """
 
-    __slots__ = ('func', 'long')
+    __slots__ = ('func', 'count')
 
-    def __init__(self, func: Callable, long: int = 1):
+    def __init__(self, func: Callable, count: int = 1):
         """
         Parameters
         ----------
         func : callable
             A callable that takes a :class:`~latychain._chain.Chain` and
             returns ``True`` or ``False``.
-        long : int, optional
+        count : int, optional
             Number of consecutive elements to pass to *func* (default 1).
         """
         self.func = func
-        self.long = long
+        self.count = count
 
     def match_lengths(self, data: tuple, pos: int) -> list[int]:
-        if pos + self.long > len(data):
+        if pos + self.count > len(data):
             return []
         from latychain._chain import Chain
-        segment = Chain(data[pos:pos + self.long])
-        return [self.long] if self.func(segment) else []
+        segment = Chain(data[pos:pos + self.count])
+        return [self.count] if self.func(segment) else []
 
     def __str__(self) -> str:
         name = getattr(self.func, '__name__', '?')
-        if self.long == 1:
+        if self.count == 1:
             return f"apply({name})"
-        return f"apply({name}, long={self.long})"
+        return f"apply({name}, count={self.count})"
 
     def __eq__(self, other: object) -> bool:
         return (isinstance(other, _Apply)
                 and self.func is other.func
-                and self.long == other.long)
+                and self.count == other.count)
 
     def __hash__(self) -> int:
-        return hash(('_Apply', id(self.func), self.long))
+        return hash(('_Apply', id(self.func), self.count))
 
 
 # ═══════════════════════════════════════════════════════════
 # _Long — string length constraint on a single element
 # ═══════════════════════════════════════════════════════════
 
-class _Long(ChainPatternAtom):
+class _Len(ChainPatternAtom):
     """Match a single element whose string length falls in [min, max]."""
 
     __slots__ = ('min_len', 'max_len')
@@ -272,16 +272,16 @@ class _Long(ChainPatternAtom):
 
     def __str__(self) -> str:
         if self.min_len == self.max_len:
-            return f"long({self.min_len})"
-        return f"long({self.min_len},{self.max_len})"
+            return f"len({self.min_len})"
+        return f"len({self.min_len},{self.max_len})"
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, _Long)
+        return (isinstance(other, _Len)
                 and self.min_len == other.min_len
                 and self.max_len == other.max_len)
 
     def __hash__(self) -> int:
-        return hash(('_Long', self.min_len, self.max_len))
+        return hash(('_Len', self.min_len, self.max_len))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -326,32 +326,28 @@ class _Ext(ChainPatternAtom):
     """Optional segment: try matching inner chain, or skip (consume 0).
 
     Always includes 0 in :meth:`match_lengths`, so the backtracking engine
-    can choose to skip this segment entirely. If an inner chain is provided,
-    its possible consumed lengths are also included.
+    can choose to skip this segment entirely. The inner chain's possible
+    consumed lengths are also included.
     """
 
     __slots__ = ('chain',)
 
-    def __init__(self, chain=None):
+    def __init__(self, chain):
         """
         Parameters
         ----------
-        chain : Chain, optional
-            The optional chain to try matching. If ``None``, the atom
-            always matches 0 elements (effectively a no-op).
+        chain : Chain
+            The optional chain to try matching.
         """
         self.chain = chain
 
     def match_lengths(self, data: tuple, pos: int) -> list[int]:
         results: list[int] = [0]
-        if self.chain is not None:
-            from latychain._chain import _all_backtrack_lengths
-            results.extend(_all_backtrack_lengths(data, pos, self.chain._data, 0))
+        from latychain._chain import _all_backtrack_lengths
+        results.extend(_all_backtrack_lengths(data, pos, self.chain._data, 0))
         return sorted(set(results))
 
     def __str__(self) -> str:
-        if self.chain is None:
-            return "ext()"
         return f"ext({self.chain})"
 
     def __eq__(self, other: object) -> bool:
@@ -366,7 +362,7 @@ class _Ext(ChainPatternAtom):
 # Factory methods on ChainPatternAtom
 # ═══════════════════════════════════════════════════════════
 
-def _any_factory(min: int = 1, max: int = 0) -> ChainPatternAtom:
+def _any_factory(min: int = 1, max: int = -1) -> ChainPatternAtom:
     """Create an atom that matches between *min* and *max* arbitrary elements.
 
     Parameters
@@ -374,12 +370,17 @@ def _any_factory(min: int = 1, max: int = 0) -> ChainPatternAtom:
     min : int, optional
         Minimum number of elements to match (default 1).
     max : int, optional
-        Maximum number of elements to match. 0 means unbounded (default 0).
+        Maximum number of elements to match. -1 means unbounded (default -1).
 
     Returns
     -------
     ChainPatternAtom
         An ``_Any`` atom instance.
+
+    Raises
+    ------
+    ValueError
+        If *min* is negative, or *max* is 0, or *max* is positive and less than *min*.
 
     Examples
     --------
@@ -389,6 +390,14 @@ def _any_factory(min: int = 1, max: int = 0) -> ChainPatternAtom:
     >>> ChainPatternAtom.any(1, 3)   # 1 to 3
     >>> ChainPatternAtom.any(0, 5)   # 0 to 5
     """
+    if not isinstance(min, int) or not isinstance(max, int):
+        raise TypeError(f"any() min and max must be ints, got min={type(min).__name__}, max={type(max).__name__}")
+    if min < 0:
+        raise ValueError(f"any() min must be >= 0, got {min}")
+    if max == 0:
+        raise ValueError(f"any() max must not be 0; use -1 for unbounded")
+    if max > 0 and min > max:
+        raise ValueError(f"any() min ({min}) must be <= max ({max})")
     return _Any(min, max)
 
 
@@ -420,8 +429,10 @@ def _enum_factory(*alternatives) -> ChainPatternAtom:
 
     Parameters
     ----------
-    *alternatives : Chain
-        One or more :class:`~latychain._chain.Chain` instances to try.
+    *alternatives : Chain or str
+        One or more :class:`~latychain._chain.Chain` instances or strings to try.
+        Strings are parsed via :meth:`Chain.from_str` — dots are treated as
+        segment separators (e.g. ``'a.b'`` becomes ``Chain(['a', 'b'])``).
         The first one that fully matches wins.
 
     Returns
@@ -429,35 +440,61 @@ def _enum_factory(*alternatives) -> ChainPatternAtom:
     ChainPatternAtom
         An ``_Enum`` atom instance.
 
+    Raises
+    ------
+    TypeError
+        If any alternative is not a :class:`Chain` or :class:`str`.
+
     Examples
     --------
-    >>> ChainPatternAtom.enum(Chain(['a']), Chain(['b']))
+    >>> ChainPatternAtom.enum('a', 'b', 'c')           # single elements
+    >>> ChainPatternAtom.enum('type.h1', 'type.h2')    # dot-separated
+    >>> ChainPatternAtom.enum(Chain(['a']), Chain(['b']))  # full chains
     """
-    return _Enum(list(alternatives))
+    from latychain._chain import Chain  # noqa: F811
+    chains = []
+    for i, alt in enumerate(alternatives):
+        if isinstance(alt, str):
+            chains.append(Chain.from_str(alt))
+        elif isinstance(alt, Chain):
+            chains.append(alt)
+        else:
+            raise TypeError(
+                f"enum() alternatives must be Chain or str instances, "
+                f"alternative {i} is {type(alt).__name__}"
+            )
+    return _Enum(chains)
 
 
-def _apply_factory(func: Callable, long: int = 1) -> ChainPatternAtom:
+def _apply_factory(func: Callable, count: int = 1) -> ChainPatternAtom:
     """Create an atom that matches via a user-supplied function.
 
-    The function receives a :class:`~latychain._chain.Chain` of *long*
+    The function receives a :class:`~latychain._chain.Chain` of *count*
     consecutive elements and must return ``True`` or ``False``.
 
     Parameters
     ----------
     func : callable
         A callable ``(Chain) -> bool``.
-    long : int, optional
+    count : int, optional
         Number of consecutive elements to pass to *func* (default 1).
 
     Returns
     -------
     ChainPatternAtom
         An ``_Apply`` atom instance.
+
+    Raises
+    ------
+    TypeError
+        If *func* is not callable.
     """
-    return _Apply(func, long)
+    if not callable(func):
+        raise TypeError(f"apply() func must be callable, got {type(func).__name__}")
+    return _Apply(func, count)
 
 
-def _long_factory(min: int, max: Optional[int] = None) -> ChainPatternAtom:
+def _len_factory(min: int, max: Optional[int] = None) -> ChainPatternAtom:
     """Create an atom that constrains the string length of a single element.
 
     Parameters
@@ -471,14 +508,23 @@ def _long_factory(min: int, max: Optional[int] = None) -> ChainPatternAtom:
     Returns
     -------
     ChainPatternAtom
-        A ``_Long`` atom instance.
+        A ``_Len`` atom instance.
+
+    Raises
+    ------
+    ValueError
+        If *min* is negative, or *max* is not ``None`` and less than *min*.
 
     Examples
     --------
-    >>> ChainPatternAtom.long(3)      # exactly 3 characters
-    >>> ChainPatternAtom.long(2, 5)   # 2 to 5 characters
+    >>> ChainPatternAtom.len(3)      # exactly 3 characters
+    >>> ChainPatternAtom.len(2, 5)   # 2 to 5 characters
     """
-    return _Long(min, max)
+    if min < 0:
+        raise ValueError(f"len() min must be >= 0, got {min}")
+    if max is not None and max < min:
+        raise ValueError(f"len() max ({max}) must be >= min ({min})")
+    return _Len(min, max)
 
 
 def _un_factory(value: str) -> ChainPatternAtom:
@@ -501,17 +547,19 @@ def _un_factory(value: str) -> ChainPatternAtom:
     return _Un(value)
 
 
-def _ext_factory(chain=None) -> ChainPatternAtom:
+def _ext_factory(chain) -> ChainPatternAtom:
     """Create an optional segment atom.
 
-    Always allows consuming 0 elements (skip). If *chain* is provided, also
-    allows consuming whatever *chain* would consume.
+    Always allows consuming 0 elements (skip). Also allows consuming
+    whatever *chain* would consume.
 
     Parameters
     ----------
-    chain : Chain, optional
-        The optional chain to try matching. Must be a :class:`Chain` instance
-        or ``None``.
+    chain : Chain or str or ChainPatternAtom
+        The optional chain to try matching. Strings are parsed via
+        :meth:`Chain.from_str` — dots are treated as segment separators.
+        ChainPatternAtom instances (like enum) are wrapped into a
+        single-element Chain.
 
     Returns
     -------
@@ -521,17 +569,23 @@ def _ext_factory(chain=None) -> ChainPatternAtom:
     Raises
     ------
     TypeError
-        If *chain* is provided but is not a :class:`Chain` or ``None``.
+        If *chain* is not a :class:`Chain`, :class:`str`, or :class:`ChainPatternAtom`.
 
     Examples
     --------
-    >>> ChainPatternAtom.ext()               # always skips
     >>> ChainPatternAtom.ext(Chain(['a']))   # matches 'a' or skips
+    >>> ChainPatternAtom.ext('a')            # matches 'a' or skips
+    >>> ChainPatternAtom.ext('a.b')          # matches ['a','b'] or skips
+    >>> ChainPatternAtom.ext(ChainPatternAtom.enum('h1', 'h2'))  # matches enum or skips
     """
     from latychain._chain import Chain  # noqa: F811
-    if chain is not None and not isinstance(chain, Chain):
+    if isinstance(chain, str):
+        chain = Chain.from_str(chain)
+    elif isinstance(chain, ChainPatternAtom):
+        chain = Chain([chain])
+    elif not isinstance(chain, Chain):
         raise TypeError(
-            f"ext() argument must be a Chain or None, got {type(chain).__name__}"
+            f"ext() argument must be a Chain, str, or ChainPatternAtom, got {type(chain).__name__}"
         )
     return _Ext(chain)
 
@@ -541,6 +595,6 @@ ChainPatternAtom.any = staticmethod(_any_factory)
 ChainPatternAtom.rex = staticmethod(_rex_factory)
 ChainPatternAtom.enum = staticmethod(_enum_factory)
 ChainPatternAtom.apply = staticmethod(_apply_factory)
-ChainPatternAtom.long = staticmethod(_long_factory)
+ChainPatternAtom.len = staticmethod(_len_factory)
 ChainPatternAtom.un = staticmethod(_un_factory)
 ChainPatternAtom.ext = staticmethod(_ext_factory)

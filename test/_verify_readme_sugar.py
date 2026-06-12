@@ -10,19 +10,17 @@ assert data == Chain(['heading', 'h1']), f"data: {data}"
 rule = .any(0).uuu.rex(r'x\d')
 assert rule == Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
 
-# ── matching: THIS WAS BROKEN in README ──
-# .x.uuu.x1.match(rule)  -- CANNOT WORK, .match() gets absorbed into chain expression
-# Fix: assign to variable first, then call .match()
+# ── matching: pattern.match(data) ──
 x = .x.uuu.x1
 assert x == Chain(['x', 'uuu', 'x1'])
-assert x.match(rule) == True
+assert rule.match(x) == True
 
 # ── nested enum ──
 rule2 = .any(0).enum(
     .admin.any(0),
     .user.any(0),
 ).rex(r'\d+')
-assert Chain(['user', 'login', '123']).match(rule2) == True
+assert rule2.match(Chain(['user', 'login', '123'])) == True
 
 # ── runner.py (entry point) ──
 import latychain.ChainDotRule

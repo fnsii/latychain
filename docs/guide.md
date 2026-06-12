@@ -21,7 +21,7 @@ Works everywhere, explicit, no magic:
 ```python
 from latychain import Chain, ChainPatternAtom
 
-data = Chain(["user", "profile", "avatar"])
+data = Chain(["user", "profile", "123"])
 
 rule = Chain([
     ChainPatternAtom.any(0),
@@ -30,7 +30,7 @@ rule = Chain([
     ChainPatternAtom.rex(r"\d+"),
 ])
 
-data.match(rule)
+rule.match(data)   # True
 ```
 
 ### Shortcut: `import ... as Patom` + `/`
@@ -40,11 +40,11 @@ Shorter names, pathlib feel:
 ```python
 from latychain import Chain, ChainPatternAtom as Patom
 
-data = Chain / "user" / "profile" / "avatar"
+data = Chain / "user" / "profile" / "123"
 
 rule = Chain / Patom.any(0) / "user" / Patom.any(0) / Patom.rex(r"\d+")
 
-data.match(rule)
+rule.match(data)   # True
 ```
 
 ### Sugar: `.xxx.yyy` (opt-in per module)
@@ -62,8 +62,8 @@ import my_rules
 # useLatyChain
 
 rule = .any(0).user.any(0).rex(r'\d+')
-data = .user.profile.id123
-data.match(rule)     # True
+data = Chain.from_str('user.profile.123')
+rule.match(data)     # True
 ```
 
 > **Note**: The entry script itself cannot use `.xxx.yyy` syntax.
@@ -74,7 +74,7 @@ data.match(rule)     # True
 
 ### How matching works
 
-`data.match(pattern)` walks both chains left-to-right:
+`pattern.match(data)` walks both chains left-to-right:
 
 | Data | Pattern | Match condition |
 |------|---------|----------------|
@@ -83,7 +83,7 @@ data.match(rule)     # True
 | `'5'` | `rex(r'\d')` | Regex fullmatch |
 | `'x','y'` | `any(...)` | Non-greedy backtracking |
 | `'b'` | `un('a')` | Negation (not equal) |
-| `'abc'` | `long(2,4)` | String length in range |
+| `'abc'` | `len(2,4)` | String length in range |
 | `'a','b'` | `ext(a),'b'` | Try match or skip |
 
 ### Backtracking example
@@ -91,7 +91,7 @@ data.match(rule)     # True
 ```python
 pattern = Chain([ChainPatternAtom.any(0), "uuu", ChainPatternAtom.rex(r"x\d")])
 data = Chain(["pre", "uuu", "x1"])
-data.match(pattern)
+pattern.match(data)
 ```
 
 The engine tries:
@@ -104,9 +104,9 @@ The engine tries:
 ```python
 data = Chain(["a", "b", "c", "d"])
 
-data.match(Chain(["a", "b"]))                     # False
-data.match(Chain(["a", "b"]), partial=True)       # True
-data.match(Chain([ChainPatternAtom.any(0), "d"]))  # True
+Chain(["a", "b"]).match(data)                     # False
+Chain(["a", "b"]).match(data, partial=True)       # True
+Chain([ChainPatternAtom.any(0), "d"]).match(data)  # True
 ```
 
 ---
@@ -120,9 +120,9 @@ from latychain import Chain, ChainPatternAtom
 
 rule = Chain(["config", "database", "connection", "pool", ChainPatternAtom.any(0)])
 
-Chain(["config", "database", "connection", "pool", "5"]).match(rule)   # True
-Chain(["config", "database", "connection", "pool"]).match(rule)        # True
-Chain(["config", "database", "timeout"]).match(rule)                   # False
+rule.match(Chain(["config", "database", "connection", "pool", "5"]))   # True
+rule.match(Chain(["config", "database", "connection", "pool"]))        # True
+rule.match(Chain(["config", "database", "timeout"]))                   # False
 ```
 
 ### Route permissions
@@ -135,10 +135,10 @@ rule = Chain(["api", "v1", ChainPatternAtom.enum(
     Chain(["admin", ChainPatternAtom.un("secret"), ChainPatternAtom.any(0)]),
 )])
 
-Chain(["api", "v1", "users", "123"]).match(rule)              # True
-Chain(["api", "v1", "admin", "dashboard"]).match(rule)        # True
-Chain(["api", "v1", "admin", "secret"]).match(rule)            # False
-Chain(["api", "v2", "users", "123"]).match(rule)               # False
+rule.match(Chain(["api", "v1", "users", "123"]))              # True
+rule.match(Chain(["api", "v1", "admin", "dashboard"]))        # True
+rule.match(Chain(["api", "v1", "admin", "secret"]))            # False
+rule.match(Chain(["api", "v2", "users", "123"]))               # False
 ```
 
 ### Log filtering
@@ -154,9 +154,9 @@ rule = Chain([
     ChainPatternAtom.any(0),
 ])
 
-Chain(["2024", "01", "15", "ERROR", "timeout"]).match(rule)      # True
-Chain(["2024", "01", "15", "INFO", "request"]).match(rule)        # False
-Chain(["2024", "01", "15", "CRITICAL", "oom"]).match(rule)        # True
+rule.match(Chain(["2024", "01", "15", "ERROR", "timeout"]))      # True
+rule.match(Chain(["2024", "01", "15", "INFO", "request"]))        # False
+rule.match(Chain(["2024", "01", "15", "CRITICAL", "oom"]))        # True
 ```
 
 ### Optional features (ext)
@@ -167,9 +167,9 @@ from latychain import Chain, ChainPatternAtom
 rule = Chain(["item", ChainPatternAtom.rex(r"\d+"),
               ChainPatternAtom.ext(Chain(["details"]))])
 
-Chain(["item", "42"]).match(rule)               # True (ext skipped)
-Chain(["item", "42", "details"]).match(rule)    # True (ext matched)
-Chain(["item", "42", "extra"]).match(rule)      # False
+rule.match(Chain(["item", "42"]))               # True (ext skipped)
+rule.match(Chain(["item", "42", "details"]))    # True (ext matched)
+rule.match(Chain(["item", "42", "extra"]))      # False
 ```
 
 ### Custom validation (apply)
@@ -181,9 +181,9 @@ rule = Chain(["user", ChainPatternAtom.rex(r"[a-z]+"), ChainPatternAtom.apply(
     lambda seg: int(str(seg).lstrip(".")) > 0
 )])
 
-Chain(["user", "alice", "42"]).match(rule)    # True
-Chain(["user", "alice", "0"]).match(rule)      # False
-Chain(["user", "alice", "-1"]).match(rule)     # False
+rule.match(Chain(["user", "alice", "42"]))    # True
+rule.match(Chain(["user", "alice", "0"]))      # False
+rule.match(Chain(["user", "alice", "-1"]))     # False
 ```
 
 ---
@@ -215,13 +215,13 @@ perms[Chain(["user",  "write"])]   # False
 
 ```python
 # any(0).b — any prefix works
-Chain(["a", "b"]).match(Chain([ChainPatternAtom.any(0), "b"]))           # True
-Chain(["x", "y", "b"]).match(Chain([ChainPatternAtom.any(0), "b"]))    # True
-Chain(["b"]).match(Chain([ChainPatternAtom.any(0), "b"]))              # True
+Chain([ChainPatternAtom.any(0), "b"]).match(Chain(["a", "b"]))           # True
+Chain([ChainPatternAtom.any(0), "b"]).match(Chain(["x", "y", "b"]))    # True
+Chain([ChainPatternAtom.any(0), "b"]).match(Chain(["b"]))              # True
 
 # .a.ext(.a).b — only .a.b or .a.a.b
 pat = Chain(["a", ChainPatternAtom.ext(Chain(["a"])), "b"])
-Chain(["a", "b"]).match(pat)                                            # True
-Chain(["a", "a", "b"]).match(pat)                                       # True
-Chain(["a", "x", "b"]).match(pat)                                       # False
+pat.match(Chain(["a", "b"]))                                            # True
+pat.match(Chain(["a", "a", "b"]))                                       # True
+pat.match(Chain(["a", "x", "b"]))                                       # False
 ```

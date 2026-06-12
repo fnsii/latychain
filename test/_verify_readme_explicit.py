@@ -7,8 +7,8 @@ def test_intro_banner():
     """Top banner — data chain, rule chain, matching."""
     data = Chain(['heading', 'h1'])
     rule = Chain([ChainPatternAtom.any(0), 'uuu', ChainPatternAtom.rex(r'x\d')])
-    assert data.match(rule) is False
-    assert Chain(['pre', 'uuu', 'x1']).match(rule) is True
+    assert rule.match(data) is False
+    assert rule.match(Chain(['pre', 'uuu', 'x1'])) is True
 
 
 def test_chain_basics():
@@ -19,20 +19,19 @@ def test_chain_basics():
     assert (c / "d") == Chain(['a', 'b', 'c', 'd'])
     assert str(c) == '.a.b.c'
     assert c.to_list() == ['a', 'b', 'c']
-    assert c.match(Chain(['a', 'b'])) is False
-    assert c.match(Chain(['a', 'b']), partial=True) is True
-    assert c.startswith(Chain(['a', 'b'])) is True
+    assert Chain(['a', 'b']).match(c) is False
+    assert Chain(['a', 'b']).match(c, partial=True) is True
 
 
 def test_atom_any():
     rule = Chain([ChainPatternAtom.any(0), 'yyy'])
-    assert Chain(['x', 'yyy']).match(rule) is True
-    assert Chain(['yyy']).match(rule) is True
+    assert rule.match(Chain(['x', 'yyy'])) is True
+    assert rule.match(Chain(['yyy'])) is True
 
 
 def test_atom_rex():
-    assert Chain(['h1']).match(Chain([ChainPatternAtom.rex(r'h[12]')])) is True
-    assert Chain(['123']).match(Chain([ChainPatternAtom.rex(r'\d+')])) is True
+    assert Chain([ChainPatternAtom.rex(r'h[12]')]).match(Chain(['h1'])) is True
+    assert Chain([ChainPatternAtom.rex(r'\d+')]).match(Chain(['123'])) is True
 
 
 def test_atom_enum():
@@ -40,29 +39,29 @@ def test_atom_enum():
         Chain(['user', ChainPatternAtom.any(0)]),
         Chain(['admin', ChainPatternAtom.any(0)]),
     )])
-    assert Chain(['user', 'login']).match(rule) is True
-    assert Chain(['guest']).match(rule) is False
+    assert rule.match(Chain(['user', 'login'])) is True
+    assert rule.match(Chain(['guest'])) is False
 
 
 def test_atom_ext():
     rule = Chain(['a', ChainPatternAtom.ext(Chain(['pi'])), 'b'])
-    assert Chain(['a', 'b']).match(rule) is True
-    assert Chain(['a', 'pi', 'b']).match(rule) is True
-    assert Chain(['a', 'x', 'b']).match(rule) is False
+    assert rule.match(Chain(['a', 'b'])) is True
+    assert rule.match(Chain(['a', 'pi', 'b'])) is True
+    assert rule.match(Chain(['a', 'x', 'b'])) is False
 
 
 def test_atom_apply():
     rule = Chain([ChainPatternAtom.apply(lambda c: str(c).startswith('.x'))])
-    assert Chain(['xhello']).match(rule) is True
+    assert rule.match(Chain(['xhello'])) is True
 
 
-def test_atom_long():
-    assert Chain(['abc']).match(Chain([ChainPatternAtom.long(3)])) is True
-    assert Chain(['abc']).match(Chain([ChainPatternAtom.long(2, 5)])) is True
+def test_atom_len():
+    assert Chain([ChainPatternAtom.len(3)]).match(Chain(['abc'])) is True
+    assert Chain([ChainPatternAtom.len(2, 5)]).match(Chain(['abc'])) is True
 
 
 def test_atom_un():
-    assert Chain(['user']).match(Chain([ChainPatternAtom.un('admin')])) is True
+    assert Chain([ChainPatternAtom.un('admin')]).match(Chain(['user'])) is True
 
 
 ALL_TESTS = [
@@ -73,7 +72,7 @@ ALL_TESTS = [
     test_atom_enum,
     test_atom_ext,
     test_atom_apply,
-    test_atom_long,
+    test_atom_len,
     test_atom_un,
 ]
 
