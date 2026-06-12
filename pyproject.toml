@@ -1,6 +1,6 @@
 [project]
 name = "latychain"
-version = "0.1.0a2"
+version = "0.2.0"
 description = "Chain-structured data and pattern matching with .xxx.yyy syntax"
 readme = "README.md"
 requires-python = ">=3.10"
