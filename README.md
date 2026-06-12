@@ -101,7 +101,10 @@ rule = Chain / "a" / Patom.ext(Patom.enum("x", "y")) / "b"
 rule.match(Chain / "a" / "x" / "b")                             # True
 
 # apply — custom predicate
+# func receives a Chain of `count` elements (default 1)
+# str(chain) returns dot-separated representation
 Chain([Patom.apply(lambda c: str(c).startswith(".x"))]).match(Chain / "xhello")  # True
+Chain([Patom.apply(lambda c: c[0] != c[1], count=2)]).match(Chain / "a" / "b")  # True
 
 # len — string length
 Chain([Patom.len(3)]).match(Chain / "abc")                      # True
