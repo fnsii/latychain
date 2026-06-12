@@ -43,7 +43,7 @@ Chain(["a", "b", "c"])               # same result
 Chain.from_str("a.b.c")             # Chain(['a', 'b', 'c'])
 
 # Chain concatenation
-Chain / "a" / "b" + Chain / "c"     # Chain(['a', 'b', 'c'])
+(Chain / "a" / "b") / (Chain / "c")  # Chain(['a', 'b', 'c'])
 ```
 
 ### Matching
