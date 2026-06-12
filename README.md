@@ -121,13 +121,47 @@ Chain(["abc"]).match(Chain([ChainPatternAtom.long(2, 5)]))     # True
 Chain(["user"]).match(Chain([ChainPatternAtom.un("admin")]))   # True
 ```
 
+All of the above can also be written with the `/` shortcut:
+
+```python
+from latychain import Chain, ChainPatternAtom as Patom
+
+# any
+rule = Chain / Patom.any(0) / "yyy"
+(Chain / "x" / "yyy").match(rule)                        # True
+
+# rex
+(Chain / "h1").match(Chain / Patom.rex(r"h[12]"))       # True
+
+# enum
+rule = Chain / Patom.enum(
+    Chain / "user" / Patom.any(0),
+    Chain / "admin" / Patom.any(0),
+)
+(Chain / "user" / "login").match(rule)                   # True
+
+# ext
+rule = Chain / "a" / Patom.ext(Chain / "pi") / "b"
+(Chain / "a" / "b").match(rule)                          # True
+
+# apply
+rule = Chain / Patom.apply(lambda c: str(c).startswith(".x"))
+(Chain / "xhello").match(rule)                           # True
+
+# long
+(Chain / "abc").match(Chain / Patom.long(3))             # True
+
+# un
+(Chain / "user").match(Chain / Patom.un("admin"))        # True
+```
+
 ---
 
 ## `.xxx.yyy` syntax sugar
 
 An import hook transforms `.xxx.yyy` expressions into `Chain([...])` calls at compile time.
-**Opt-in per module** — add `# useLatyChain` to the first few lines. `Chain` and `ChainPatternAtom`
-are auto-injected, no explicit import needed.
+**Opt-in per module** — add `# useLatyChain` to the first few lines. `Chain`, `ChainPatternAtom`,
+and the `Patom` shortcut are auto-injected, no explicit import needed.
 
 **Requires two files** — the hook only transforms imported modules, not the entry script:
 
@@ -155,6 +189,13 @@ rule2 = .any(0).enum(
 ).rex(r'\d+')
 
 Chain(["user", "login", "123"]).match(rule2)   # True
+
+# Patom is auto-injected — use it with / for mixed styles
+route = Chain / Patom.enum(
+    Chain / "admin" / Patom.any(0),
+    Chain / "user" / Patom.any(0),
+) / Patom.rex(r"\d+")
+(Chain / "user" / "dashboard" / "42").match(route)  # True
 ```
 
 The transformer skips strings, comments, float literals, and `obj.attr` access.
