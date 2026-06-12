@@ -108,10 +108,10 @@ Patom.ext(Patom.enum('x', 'y'))
 # 新: .hi.123 → Chain(['hi', '123'])
 ```
 
-#### 7. 糖语法 .match() 不再被吞
+#### 7. 糖语法 .match() 继续被吞
 ```python
-# 旧: .user.admin.match(rule) 被错误转换
-# 新: .user.admin.match(rule) 正确识别为方法调用
+# .user.admin.match(rule) 中的 .match() 会被当作链段
+# 正确用法: rule.match(.user.admin)
 ```
 
 ### Files Changed

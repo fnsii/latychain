@@ -131,16 +131,9 @@ def read_dot_expr(source: str, pos: int) -> Tuple[str, int]:
         if pos < len(source) and source[pos] == '.':
             nxt = pos + 1
             if nxt < len(source) and (source[nxt].isalnum() or source[nxt] == '_'):
-                name_start = nxt
                 pos = nxt
                 while pos < len(source) and (source[pos].isalnum() or source[pos] == '_'):
                     pos += 1
-                name = source[name_start:pos]
-                # If followed by ( and name is not a known atom, stop here
-                # This allows .match(data) to be a method call, not a chain segment
-                if pos < len(source) and source[pos] == '(' and name not in _ATOM_NAMES:
-                    pos = saved
-                    break
                 if pos < len(source) and source[pos] == '(':
                     pos = _paren_depth(source, pos)
                 continue  # successfully read a segment, continue to look for more

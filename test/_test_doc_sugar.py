@@ -27,7 +27,7 @@ assert x == Chain(['x', 'uuu', 'x1'])
 assert rule.match(x)
 
 # ═══════════════════════════════════════════════════════════
-# Quick Start — CORRECT pattern: build data separately, call .match()
+# Quick Start
 # ═══════════════════════════════════════════════════════════
 path = .user.profile.avatar
 assert path == Chain(['user', 'profile', 'avatar'])
@@ -50,22 +50,34 @@ assert .any(0).uuu.rex(r'x\d') == Chain([ChainPatternAtom.any(0), 'uuu', ChainPa
 # ═══════════════════════════════════════════════════════════
 # any examples
 # ═══════════════════════════════════════════════════════════
-assert .any().match(Chain(['x', 'y']))        # at least 1: 1-2 elements → matches
-assert not .any().match(Chain([]))            # at least 1: empty chain fails
-assert .any(0).match(Chain(['x', 'y']))       # 0 or more
-assert .any(0).match(Chain([]))               # 0 or more: empty chain ok
-assert .any(2).match(Chain(['x', 'y', 'z']))  # at least 2
-assert .any(1, 3).z.match(Chain(['x', 'y', 'z']))  # 1-3 then 'z'
-assert .any(0, 5).match(Chain(['x', 'y']))    # 0-5
+r_any = .any()
+assert r_any.match(Chain(['x', 'y']))        # at least 1
+assert not r_any.match(Chain([]))            # empty fails
+
+r_any0 = .any(0)
+assert r_any0.match(Chain(['x', 'y']))       # 0 or more
+assert r_any0.match(Chain([]))               # empty ok
+
+r_any2 = .any(2)
+assert r_any2.match(Chain(['x', 'y', 'z']))  # at least 2
+
+r_any13z = .any(1, 3).z
+assert r_any13z.match(Chain(['x', 'y', 'z']))  # 1-3 then 'z'
+
+r_any05 = .any(0, 5)
+assert r_any05.match(Chain(['x', 'y']))      # 0-5
 
 # ═══════════════════════════════════════════════════════════
 # rex examples
 # ═══════════════════════════════════════════════════════════
-assert .rex(r'h[12]').match(Chain(['h1']))
-assert .rex(r'h[12]').match(Chain(['h2']))
-assert not .rex(r'h[12]').match(Chain(['h3']))
-assert .rex(r'\d+').match(Chain(['123']))
-assert .rex(r'\d+').match(Chain(['0']))
+r_rex = .rex(r'h[12]')
+assert r_rex.match(Chain(['h1']))
+assert r_rex.match(Chain(['h2']))
+assert not r_rex.match(Chain(['h3']))
+
+r_digits = .rex(r'\d+')
+assert r_digits.match(Chain(['123']))
+assert r_digits.match(Chain(['0']))
 
 # ═══════════════════════════════════════════════════════════
 # enum examples
@@ -81,21 +93,28 @@ assert not enum_pat.match(Chain(['type', 'h3']))
 # ═══════════════════════════════════════════════════════════
 # apply examples
 # ═══════════════════════════════════════════════════════════
-assert .apply(lambda seg: str(seg).startswith('.x')).match(Chain(['xhello']))
-assert .apply(lambda seg: seg[0] != seg[1], 2).match(Chain(['a', 'b']))
+r_apply = .apply(lambda seg: str(seg).startswith('.x'))
+assert r_apply.match(Chain(['xhello']))
+
+r_apply2 = .apply(lambda seg: seg[0] != seg[1], 2)
+assert r_apply2.match(Chain(['a', 'b']))
 
 # ═══════════════════════════════════════════════════════════
 # len examples
 # ═══════════════════════════════════════════════════════════
-assert .len(3).match(Chain(['abc']))
-assert not .len(3).match(Chain(['ab']))
-assert .len(2, 5).match(Chain(['abc']))
+r_len3 = .len(3)
+assert r_len3.match(Chain(['abc']))
+assert not r_len3.match(Chain(['ab']))
+
+r_len25 = .len(2, 5)
+assert r_len25.match(Chain(['abc']))
 
 # ═══════════════════════════════════════════════════════════
 # un examples
 # ═══════════════════════════════════════════════════════════
-assert .un('admin').match(Chain(['user']))
-assert not .un('admin').match(Chain(['admin']))
+r_un = .un('admin')
+assert r_un.match(Chain(['user']))
+assert not r_un.match(Chain(['admin']))
 
 # ═══════════════════════════════════════════════════════════
 # ext examples
@@ -109,9 +128,11 @@ assert not ext_pat.match(Chain(['a', 'x', 'b']))
 # Full vs partial match
 # ═══════════════════════════════════════════════════════════
 data = .a.b.c.d
-assert not .a.b.match(data)
-assert .a.b.match(data, partial=True)
-assert .any(0).d.match(data)
+r_ab = .a.b
+assert not r_ab.match(data)
+assert r_ab.match(data, partial=True)
+r_any0_d = .any(0).d
+assert r_any0_d.match(data)
 
 # ═══════════════════════════════════════════════════════════
 # Examples: HTML headings
@@ -203,12 +224,14 @@ assert not rule_apply.match(Chain(['user', 'alice', '-1']))
 # ═══════════════════════════════════════════════════════════
 # Guide: any vs ext
 # ═══════════════════════════════════════════════════════════
-assert .any(0).b.match(Chain(['a', 'b']))
-assert .any(0).b.match(Chain(['x', 'y', 'b']))
-assert .any(0).b.match(Chain(['b']))
+r_any0_b = .any(0).b
+assert r_any0_b.match(Chain(['a', 'b']))
+assert r_any0_b.match(Chain(['x', 'y', 'b']))
+assert r_any0_b.match(Chain(['b']))
 
-assert .a.ext(.a).b.match(Chain(['a', 'b']))
-assert not .a.ext(.a).b.match(Chain(['a', 'x', 'b']))
+r_a_ext_a_b = .a.ext(.a).b
+assert r_a_ext_a_b.match(Chain(['a', 'b']))
+assert not r_a_ext_a_b.match(Chain(['a', 'x', 'b']))
 
 # ═══════════════════════════════════════════════════════════
 # Guide: Migration

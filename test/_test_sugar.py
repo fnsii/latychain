@@ -45,30 +45,34 @@ assert r2.match(Chain / "pre" / "wuhu" / "xok"), "enum second alt"
 assert not r2.match(Chain / "pre" / "hi" / "abc"), "enum no-match"
 
 # Un: negation
-assert .un('admin').match(Chain / "user"), "un match"
-assert not .un('admin').match(Chain / "admin"), "un no-match"
-# Un with quoted comma (regression: _split_args must track quotes)
-assert not .un('a,b').match(Chain / "a,b"), "un: a,b equals a,b should not match"
-assert .un('a,b').match(Chain / "x"), "un: x != a,b should match"
+r_un = .un('admin')
+assert r_un.match(Chain / "user"), "un match"
+assert not r_un.match(Chain / "admin"), "un no-match"
+# Un with quoted comma
+r_un_comma = .un('a,b')
+assert not r_un_comma.match(Chain / "a,b"), "un: a,b equals a,b should not match"
+assert r_un_comma.match(Chain / "x"), "un: x != a,b should match"
 
 # Len: string length constraint
-assert .len(2, 4).match(Chain / "abc"), "len match"
-assert not .len(2, 4).match(Chain / "a"), "len no-match"
-assert not .len(2, 4).match(Chain / "abcde"), "len too long"
+r_len = .len(2, 4)
+assert r_len.match(Chain / "abc"), "len match"
+assert not r_len.match(Chain / "a"), "len no-match"
+assert not r_len.match(Chain / "abcde"), "len too long"
 
 # Apply: custom function
-assert .apply(lambda c: len(c) == 1).match(Chain / "abc"), "apply single"
-assert not .apply(lambda c: len(c) == 1).match(Chain / "a" / "b"), "apply no-match"
+r_apply = .apply(lambda c: len(c) == 1)
+assert r_apply.match(Chain / "abc"), "apply single"
+assert not r_apply.match(Chain / "a" / "b"), "apply no-match"
 
 # Apply with count=2
 r_apply2 = .apply(lambda c: len(c) == 2, 2)
 assert r_apply2.match(Chain / "a" / "b"), "apply count=2 match"
 assert not r_apply2.match(Chain / "a"), "apply count=2 too short"
 
-# ---- Partial match ----
-data = .a.b.c.d
-assert .a.b.match(data, partial=True), "partial yes"
-assert not .a.b.match(data, partial=False), "partial no"
+# ---- Partial match (use explicit Chain, not sugar .match()) ----
+data = Chain / "a" / "b" / "c" / "d"
+assert Chain(["a", "b"]).match(data, partial=True), "partial yes"
+assert not Chain(["a", "b"]).match(data, partial=False), "partial no"
 
 # ---- / operator ----
 combined = Chain / "a" / "b"
